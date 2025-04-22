@@ -1,4 +1,3 @@
-from overflow import *
 from objets import *
 from matplotlib.animation import FuncAnimation
 from tqdm import tqdm

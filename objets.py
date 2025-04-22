@@ -158,7 +158,7 @@ def extend_closed(X) :
         X_closed = swapaxes(X_closed, 0, i)
     return X_closed
 
-def grad(X:ndarray,flag = "closed") :
+def grad(X:ndarray,flag = "") :
     """renvoie le gradient de X,
     soit autant d'array que X a de dimensions, contenant les dérivées partielles de X selon cette direction"""
     
@@ -189,7 +189,7 @@ def grad(X:ndarray,flag = "closed") :
 
     return array(dX)
 
-def div(X_vec:ndarray,flag = "closed") :
+def div(X_vec:ndarray,flag = "") :
     """renvoie la divergence de X"""
     S = X_vec.shape
     div = zeros(S[1:])
@@ -201,6 +201,17 @@ def array_to_func(X:ndarray, t_end:float, dt:float):
     """renvoie une fonction interpolant les valeurs de X"""
     T = linspace(0-dt,t_end+dt,len(X))
     return interp1d(T,X)
+
+def V_dot(V,q):
+    assert V.shape[:-1] == q.shape
+    S=V.shape
+    if len(S)>1:
+        out = zeros([S[-1],S[0],S[1]])
+        for i in range(S[-1]):
+            out[S[-1]-i-1,:,:] = V[:,:,i]*q
+        return out 
+    else : 
+        return V * q
 
 class Cellule:
     def __init__(self, x, y=None, z=None, dx=0.1, dy=0.1,dz=0.1,V=None):
@@ -232,11 +243,7 @@ class Cellule:
             self.volume = dx*dy*dz
         
         # Propriétés physiques de la cellule
-        if V is None :
-            self.velocity = array_to_func(zeros((1,self.dim)))
-        else :
-            assert V.shape[1:] == (1,self.dim)
-            self.velocity = array_to_func(V)
+        self.velocity = V
             
         self.P = 1e5
         self.rho = 1.0
@@ -435,7 +442,7 @@ class Grid:
         return tot_c
 
 class solver:
-    def __init__(self, grid : Grid, dt : float, t_end: float, mu : float,V:ndarray , ordre=1, CL="closed"):
+    def __init__(self, grid : Grid, dt : float, t_end: float, mu : float,V:ndarray , ordre=1, CL=""):
         self.grid = grid
         self.dt = dt
         self.t_end = t_end
@@ -454,7 +461,7 @@ class solver:
 
     def dQdt_cell(self,q,t) :
         grad_c = grad( q,flag=self.CL)
-        out = div(self.mu*grad_c-self.V*q,flag=self.CL)
+        out = div(self.mu*grad_c-V_dot(self.V,q),flag=self.CL)
         self.stay_positive(q, out)
             # out[0] = 0  # concentration nulle aux bords
         # out[-1] = out[0] # périodicité
@@ -485,15 +492,14 @@ class solver:
 
 def anim_surface(matSol: ndarray, grid: Grid, T: ndarray = None, fps: int = 10, name="animation.gif"):
     """Crée une animation de la solution donnée en format GIF."""
-    fig, ax = subplots(subplot_kw={"projection": "3d"})  # initialise la figure
+    fig, ax = subplots()  # initialise la figure
     X, Y = grid.X, grid.Y
     Z = matSol[0]
-    surf = ax.plot_surface(X, Y, Z, cmap='viridis')
 
     def animate(i):
         ax.clear()
         Z = matSol[i]
-        surf = ax.plot_surface(X, Y, Z, cmap='viridis')
+        surf = ax.imshow( Z, cmap='viridis',interpolation='nearest')
         if T is not None:
             ax.set_title(f"t = {T[i]:.2f}")
         return surf,
@@ -515,7 +521,7 @@ if __name__=="__main__" :
     A[1] = 2
     A[3] = 1
     A[2] = 3
-    grad_A = grad(A,periodic=False)
+    grad_A = grad(A)
     print("A = ",A)
     print("grad(A) = ",grad_A)
     print("A = ",A)
@@ -526,7 +532,7 @@ if __name__=="__main__" :
     B[0] = A
     B[1] = 2*A
     B[3] = A
-    grad_B = grad(B,periodic=False)
+    grad_B = grad(B)
     print("B = ",B)
     print("grad(B) = ",grad_B)
     print("B = ",B)
