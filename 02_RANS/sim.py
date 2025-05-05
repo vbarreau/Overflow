@@ -26,8 +26,11 @@ class Parametres:
 
 class Sim():
     """Classe pour la simulation"""
-    def __init__(self, filename:str)->None:
-        self.mesh = Mesh(filename)
+    def __init__(self, **kwargs)->None:
+        if len(kwargs) == 1 and isinstance(kwargs['filename'], str):
+            filename = kwargs['filename']
+            self.mesh = Mesh(filename = filename)
+        
         self.cell_param = [Parametres() for _ in range(len(self.mesh.cells))]
 
 
@@ -81,9 +84,14 @@ class Sim():
                 
         return grad 
     
-    def plot(self, var:str,ax = plt.subplots()[1])->None:
+    def plot(self, var:str,ax = None)->None:
         """Plot the mesh with the variable"""
-        for i in range(len(self.mesh.cells)):
+        if ax is None:
+            fig, ax = plt.subplots()
+        else:
+            fig = ax.figure
+
+        for i in range(self.mesh.size):
             cell = self.mesh.cells[i]
             x,y = cell.centroid
             ax.scatter(x,y,s=10,c='k')
@@ -91,7 +99,13 @@ class Sim():
 
 if __name__ == "__main__":
     
-    sim = Sim("D:/OneDrive/Documents/11-Codes/overflow/02_RANS/circle_mesh.dat")
+    sim = Sim(filename = "D:/OneDrive/Documents/11-Codes/overflow/02_RANS/circle_mesh.dat")
     gradient = sim.compute_gradient("T")
-    sim.plot("T")
+    fig , ax = plt.subplots()
+    # sim.mesh.plot_mesh(ax=ax)
+    sim.plot("T",ax=ax)
+    ax.set_aspect('equal', adjustable='box')
+    ax.set_title("Gradient de T")
+    ax.set_xlim(0,20)
+    ax.set_ylim(0,20)
     plt.show()

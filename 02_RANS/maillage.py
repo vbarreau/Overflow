@@ -105,8 +105,9 @@ class Mesh():
             line = lines[i]
             if line[0]=='c':
                 index = len(cells)
+                words = line.split()
                 # On récupère les indices des noeuds de la cellule
-                faces_index = [int(x) for x in line[2:].split()]
+                faces_index = [int(x) for x in words[1:]]
                 nodes_index = []
                 voisins = []
                 for fi in faces_index:
@@ -234,9 +235,10 @@ class Mesh():
         y_max = np.max(self.nodes[:,1])
         return x_min, x_max, y_min, y_max
     
-    def plot_mesh(self)->None:
+    def plot_mesh(self,ax=None)->None:
         """Affichage du maillage"""
-        fig, ax = plt.subplots()
+        if ax is None:
+            fig, ax = plt.subplots()
         for i in range(len(self.cells)):
             cell = (self.cells[i])
             faces = self.faces[cell.faces]
