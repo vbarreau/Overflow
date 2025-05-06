@@ -22,6 +22,19 @@ class Parametres:
             return self.rho
         else:
             raise ValueError(f"Variable {var} non reconnue")
+        
+    def set_var(self,var:str,value:float)->None:
+        """Set the value of a variable in the cell"""
+        if var == "T":
+            self.T = value
+        elif var == "p":
+            self.p = value
+        elif var == "v":
+            self.v = value
+        elif var == "rho":
+            self.rho = value
+        else:
+            raise ValueError(f"Variable {var} non reconnue")
 
 
 class Sim():
@@ -88,6 +101,32 @@ class Sim():
                 
         return grad 
     
+    def set_var(self,var:str,values:np.array,x,y)->None:
+        """Set the value of a variable in the mesh at a given point"""
+        return None
+    
+    def set_CI(self,var,*args)-> None:
+        """ Set the initial condition of the simulation from either a matrix or a function"""
+        if len(args) == 1 and isinstance(args[0],np.ndarray):
+            xmin,xmax,ymin,ymax = self.mesh.span()
+            DX = (xmax-xmin)/args[0].shape[0]
+            DY = (ymax-ymin)/args[0].shape[1]
+            for cell in self.mesh.cells:
+                x = cell.centroid[0]
+                y = cell.centroid[1]
+                nx = int((x-xmin)/DX)
+                ny = int((y-ymin)/DY)
+                if nx < 0 or nx >= args[0].shape[0] or ny < 0 or ny >= args[0].shape[1]:
+                    raise ValueError(f"Cellule {cell.indice_global} en dehors de la matrice")
+                self.cell_param[cell.indice_global].set_var(var,args[0][nx,ny])
+        elif len(args) == 1 and callable(args[0]):
+            for cell in self.mesh.cells:
+                x = cell.centroid[0]
+                y = cell.centroid[1]
+                self.cell_param[cell.indice_global].set_var(var,args[0](x,y))
+        return None
+
+    # Plotting
     
     def plot(self, var:str,ax = None,chrono=False)->None:
         """Plot the mesh with the variable"""
@@ -105,11 +144,18 @@ class Sim():
             
         if chrono:
             print(f"Temps de réalisation du graphique : {time.time()-t} s")
+
+def radial_CI(x,y,A=1)->float:
+    """Fonction de condition initiale radiale"""
+
+    r = np.sqrt((x-20)**2 + (y-10)**2)
+    return A*np.exp(-(r-2)**2/4)
     
 
 if __name__ == "__main__":
     
     sim = Sim(filename = "D:/OneDrive/Documents/11-Codes/overflow/02_RANS/circle_mesh.dat")
+    sim.set_CI("T",radial_CI)
     gradient = sim.compute_gradient("T")
     fig , ax = plt.subplots()
     # sim.mesh.plot_mesh(ax=ax)
