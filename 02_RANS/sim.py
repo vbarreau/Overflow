@@ -1,7 +1,7 @@
 import sys
 sys.path.append(r"D:/OneDrive/Documents/11-Codes/overflow/02_RANS")
 from maillage import *
-
+import time
 
 class Parametres:
     """Classe pour les parametres de la cellule"""
@@ -29,8 +29,9 @@ class Sim():
     def __init__(self, **kwargs)->None:
         if len(kwargs) == 1 and isinstance(kwargs['filename'], str):
             filename = kwargs['filename']
+            t = time.time()
             self.mesh = Mesh(filename = filename)
-        
+            print(f"Temps de chargement du maillage : {time.time()-t} s")
         self.cell_param = [Parametres() for _ in range(len(self.mesh.cells))]
 
 
@@ -67,9 +68,10 @@ class Sim():
 
 # Mesh
 
-    def compute_gradient(self, var:str)->np.array:
+    def compute_gradient(self, var:str,chrono=False)->np.array:
         """Calcul du gradient d'une variable dans la cellule"""
-
+        if chrono:
+            t = time.time()
         grad = np.zeros((len(self.mesh.cells),2))
         for i in range(len(self.mesh.faces)):
             f = self.mesh.faces[i]
@@ -81,31 +83,51 @@ class Sim():
                 grad[f.neighbour] -= flux_f
         grad[:,0] /= self.mesh.cell_volume
         grad[:,1] /= self.mesh.cell_volume
+        if chrono:
+            print(f"Temps de calcul du gradient : {time.time()-t} s")
                 
         return grad 
     
-    def plot(self, var:str,ax = None)->None:
+    def plot(self, var:str,ax = None,chrono=False)->None:
         """Plot the mesh with the variable"""
+        if chrono:
+            t = time.time()
         if ax is None:
             fig, ax = plt.subplots()
-        else:
-            fig = ax.figure
+        
+        N = len(self.mesh.cells)
+        n = int(np.sqrt(N)*2/3)
+        M = np.zeros((n,n,2))
+        span = self.mesh.span()
+        dx = (span[1]-span[0])/n
+        dy = (span[3]-span[2])/n
 
-        for i in range(self.mesh.size):
+        for i in tqdm(range(N), desc="Plotting cells"):
             cell = self.mesh.cells[i]
-            x,y = cell.centroid
-            ax.scatter(x,y,s=10,c='k')
+            x = cell.centroid[0] 
+            nx = int(x/dx)
+            y = cell.centroid[1]
+            ny = int(y/dy) 
+            val = self.cell_param[i].get_var(var)
+            M[nx,ny,0] += val
+            M[nx,ny,1] += 1 
+        M[:,:,0] /= M[:,:,1]
+        extent = [span[0], span[1], span[2], span[3]]
+        ax.imshow(M[:,:,0], origin='lower', aspect='equal', cmap='viridis', extent=extent)
+        colorbar = plt.colorbar(ax.imshow(M[:,:,0], origin='lower', aspect='auto', cmap='viridis'), ax=ax)
+            
+        if chrono:
+            print(f"Temps de réalisation du graphique : {time.time()-t} s")
     
 
 if __name__ == "__main__":
     
     sim = Sim(filename = "D:/OneDrive/Documents/11-Codes/overflow/02_RANS/circle_mesh.dat")
-    gradient = sim.compute_gradient("T")
+    gradient = sim.compute_gradient("T",chrono=True)
     fig , ax = plt.subplots()
     # sim.mesh.plot_mesh(ax=ax)
-    sim.plot("T",ax=ax)
+    sim.plot("T",ax=ax,chrono=True)
     ax.set_aspect('equal', adjustable='box')
     ax.set_title("Gradient de T")
-    ax.set_xlim(0,20)
-    ax.set_ylim(0,20)
+
     plt.show()

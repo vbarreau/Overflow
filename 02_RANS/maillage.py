@@ -1,5 +1,6 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
+from tqdm import tqdm
 
 def surface_triangle(node1, node2, node3):
     """Calcul de la surface d'un triangle par le produit vectoriel"""
@@ -43,9 +44,8 @@ class Mesh():
         """Initialize the Mesh object and read nodes, faces, and cells."""
         if len(kwargs) == 1 and isinstance(kwargs['filename'], str):
             filename = kwargs['filename']
-            self.nodes = self.mesh_read_nodes(filename)
-            self.faces = self.mesh_read_faces(filename, self.nodes)
-            self.cells = self.mesh_read_cells(filename, self.faces, self.nodes)
+            self.nodes, self.faces, self.cells = self.read_mesh(filename)
+
         elif isinstance(kwargs['cells'], np.ndarray):
             self.nodes = kwargs['nodes']
             self.faces = kwargs['faces']
@@ -58,50 +58,67 @@ class Mesh():
             face.set_owner(self.nodes, self.cells)
         self.size = len(self.cells)
 
-
-
-    def  mesh_read_nodes(self,filename:str)->np.array:
-        """Lecture du maillage à partir d'un fichier"""
+    def read_mesh(self, filename:str)->None:
         lines = open(filename, 'r').readlines()
-        nodes = []
-
-        for i in range(len(lines)):
-            line = lines[i]
-            if line[0]=='n':
-                nodes.append([float(x) for x in line[1:].split()])
-        nodes = np.array(nodes)
-
-        return nodes
-    
-    def mesh_read_faces(self, filename:str,nodes)->np.array:
-        """Lecture du maillage à partir d'un fichier"""
-        lines = open(filename, 'r').readlines()
-        faces = []
         n,f,c = get_paraph(lines)
-        # print("first face line : ", f)
-        for i in range(f,c+1):
+        nodes = self.mesh_read_nodes(filename)
+        faces_ref = np.zeros((c-f+1, 2 ), dtype=int)
+        cells_of_faces = np.zeros((c-f+1, 2 ), dtype=int)
+        cells_of_faces[:,:] = -1
+        cells_ref = np.zeros((len(lines)-c+1, 3), dtype=int)
+        n_count = 0
+        f_count = 0
+        for i in tqdm(range(len(lines)), desc="Lecture du maillage"):
             line = lines[i]
-            if line[0]=='f':
-                index = len(faces)
-                # On récupère les indices des noeuds de la face
-                nodes_index = [int(x) for x in line[1:].split()]
-                cells_index = []
-                for j in range(c,len(lines)):
-                    l = lines[j]
-                    if l[0]=='c' and f" {index}" in l:
-                        # On récupère les indices des cellules de la face
-                        cells_index.append(int(l[1]))
-                # On crée la face
-                if len(cells_index) > 0:
-                    faces.append(self.Face(index, nodes_index, cells_index,nodes))
-        return np.array(faces)
+            if line[0]=='n' :
+                point = [float(x) for x in line[1:].split()]
+                nodes[n_count,0] = point[0]
+                nodes[n_count,1] = point[1]
+                n_count += 1
+            elif line[0]=='f':
+                words = line.split()
+                faces_ref[f_count,0] = int(words[1])
+                faces_ref[f_count,1] = int(words[2])
+                f_count += 1
+            elif line[0]=='c':
+                words = line.split()
+                c_count = int(words[0][1:])
+                cells_ref[c_count,0] = int(words[1])
+                cells_ref[c_count,1] = int(words[2])
+                cells_ref[c_count,2] = int(words[3])
+                for j in range(3):
+                    cells_of_faces[cells_ref[c_count,j]] = c_count
 
-    def mesh_read_cells(self,filename:str,faces,nodes)->np.array:
+                c_count += 1
+
+        # On enlève les lignes vides
+        faces_ref = faces_ref[~np.all(faces_ref == 0, axis=1)]
+        faces = np.zeros((len(faces_ref)), dtype=self.Face)
+        for i in range(len(faces_ref)):
+            faces[i] = self.Face(i, faces_ref[i],cells_of_faces[i] ,nodes)
+
+        cells_ref = cells_ref[~np.all(cells_ref == 0, axis=1)]
+        cells = np.zeros((len(cells_ref)), dtype=self.Cell)
+        for i in range(len(cells_ref)):
+            nodes_of_cell = []
+            for j_face in cells_ref[i]:
+                # On récupère les indices des noeuds de la face
+                nodes_of_cell += faces[j_face].nodes_index.tolist()
+            list(set(nodes_of_cell))
+            # On cherche les voisines de la cellule
+            voisins = []
+            for j in range(3):
+                if cells_of_faces[cells_ref[i,j]][0] != -1:
+                    voisins.append(cells_of_faces[cells_ref[i,j]][0])
+            cells[i] = self.Cell(i, cells_ref[i], nodes_of_cell,voisins,nodes)
+        return nodes, faces, cells
+
+
         """Lecture du maillage à partir d'un fichier"""
         lines = open(filename, 'r').readlines()
         cells = []
 
-        for i in range(len(lines)):
+        for i in tqdm(range(len(lines)), desc="Lecture des cellules"):
             line = lines[i]
             if line[0]=='c':
                 index = len(cells)
