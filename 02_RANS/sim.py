@@ -88,6 +88,7 @@ class Sim():
                 
         return grad 
     
+    
     def plot(self, var:str,ax = None,chrono=False)->None:
         """Plot the mesh with the variable"""
         if chrono:
@@ -95,26 +96,12 @@ class Sim():
         if ax is None:
             fig, ax = plt.subplots()
         
-        N = len(self.mesh.cells)
-        n = int(np.sqrt(N)*2/3)
-        M = np.zeros((n,n,2))
-        span = self.mesh.span()
-        dx = (span[1]-span[0])/n
-        dy = (span[3]-span[2])/n
-
-        for i in tqdm(range(N), desc="Plotting cells"):
-            cell = self.mesh.cells[i]
-            x = cell.centroid[0] 
-            nx = int(x/dx)
-            y = cell.centroid[1]
-            ny = int(y/dy) 
-            val = self.cell_param[i].get_var(var)
-            M[nx,ny,0] += val
-            M[nx,ny,1] += 1 
-        M[:,:,0] /= M[:,:,1]
-        extent = [span[0], span[1], span[2], span[3]]
-        ax.imshow(M[:,:,0], origin='lower', aspect='equal', cmap='viridis', extent=extent)
-        colorbar = plt.colorbar(ax.imshow(M[:,:,0], origin='lower', aspect='auto', cmap='viridis'), ax=ax)
+        x = [cell.centroid[0] for cell in self.mesh.cells]
+        y = [cell.centroid[1] for cell in self.mesh.cells]
+        values = [self.cell_param[i].get_var(var) for i in range(len(self.mesh.cells))]
+        
+        sc = ax.scatter(x, y, c=values, cmap='viridis', s=10)
+        plt.colorbar(sc, ax=ax, label=var)
             
         if chrono:
             print(f"Temps de réalisation du graphique : {time.time()-t} s")
@@ -123,10 +110,10 @@ class Sim():
 if __name__ == "__main__":
     
     sim = Sim(filename = "D:/OneDrive/Documents/11-Codes/overflow/02_RANS/circle_mesh.dat")
-    gradient = sim.compute_gradient("T",chrono=True)
+    gradient = sim.compute_gradient("T")
     fig , ax = plt.subplots()
     # sim.mesh.plot_mesh(ax=ax)
-    sim.plot("T",ax=ax,chrono=True)
+    sim.plot("T",ax=ax)
     ax.set_aspect('equal', adjustable='box')
     ax.set_title("Gradient de T")
 

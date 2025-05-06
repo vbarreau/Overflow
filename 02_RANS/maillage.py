@@ -114,33 +114,21 @@ class Mesh():
         return nodes, faces, cells
 
 
+
+    def  mesh_read_nodes(self,filename:str)->np.array:
         """Lecture du maillage à partir d'un fichier"""
         lines = open(filename, 'r').readlines()
-        cells = []
+        nodes = []
 
-        for i in tqdm(range(len(lines)), desc="Lecture des cellules"):
+        for i in range(len(lines)):
             line = lines[i]
-            if line[0]=='c':
-                index = len(cells)
-                words = line.split()
-                # On récupère les indices des noeuds de la cellule
-                faces_index = [int(x) for x in words[1:]]
-                nodes_index = []
-                voisins = []
-                for fi in faces_index:
-                    # On récupère les indices des noeuds de la face
-                    f = faces[fi]
-                    nodes_index += f.nodes_index.tolist()
-                    # On récupère les indices des cellules voisines de la face
-                    for j in range(len(f.cells)):
-                        if f.cells[j] != index:
-                            voisins.append(f.cells[j])
-                # On enlève les doublons
-                nodes_index = list(set(nodes_index))
-                voisins = list(set(voisins))
-                cells.append(self.Cell(index, faces_index, nodes_index, voisins,nodes))
+            if line[0]=='n':
+                nodes.append([float(x) for x in line[1:].split()])
+        nodes = np.array(nodes)
 
-        return np.array(cells)
+        return nodes
+    
+
 
     def set_mesh_volume(self)->None:
         """Calcul du volume de chaque cellule"""
