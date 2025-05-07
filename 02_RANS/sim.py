@@ -39,42 +39,58 @@ class Parametres:
 
 class Sim():
     """Classe pour la simulation"""
-    def __init__(self, **kwargs)->None:
-        if len(kwargs) == 1 and isinstance(kwargs['filename'], str):
-            filename = kwargs['filename']
+    def __init__(self, *args, **kwargs)->None:
+        if (len(args) == 1 and isinstance(args[0], str)) or (len(kwargs) == 1 and 'filename' in kwargs and isinstance(kwargs['filename'], str)):
+            filename = kwargs['filename'] if 'filename' in kwargs else args[0]
             t = time.time()
-            self.mesh = Mesh(filename = filename)
+            self.mesh = Mesh(filename=filename)
             print(f"Temps de chargement du maillage : {time.time()-t} s")
+        elif len(kwargs) == 1 and 'mesh' in kwargs and isinstance(kwargs['mesh'], Mesh):
+            self.mesh = kwargs['mesh']
+        else:
+            raise ValueError("Invalid arguments: expected 'filename' or 'mesh' as input.")
         self.cell_param = [Parametres() for _ in range(len(self.mesh.cells))]
 
 
 # Face
     def get_face_param(self,face_index:int)->Parametres: 
         """Calcul des parametres de la face"""
+
         cells = self.mesh.cells
         face = self.mesh.faces[face_index]
         index_owner = face.owner
         index_neighbour = face.neighbour
-        Vo = cells[face.owner].volume
-        Vn = cells[face.neighbour].volume
-        gn = Vo/(Vo + Vn)
-        go = 1-gn
-        T = gn*self.cell_param[index_neighbour].T + go*self.cell_param[index_owner].T
-        v = gn*self.cell_param[index_neighbour].v + go*self.cell_param[index_owner].v
-        p = gn*self.cell_param[index_neighbour].p + go*self.cell_param[index_owner].p
-        return Parametres(T,p,v)
+        if index_owner == -1 :
+            return self.cell_param[index_neighbour]
+        elif index_neighbour == -1 :
+            return self.cell_param[index_owner]
+        else :
+
+            Vo = cells[face.owner].volume
+            Vn = cells[face.neighbour].volume
+            gn = Vo/(Vo + Vn)
+            go = 1-gn
+            T = gn*self.cell_param[index_neighbour].T + go*self.cell_param[index_owner].T
+            v = gn*self.cell_param[index_neighbour].v + go*self.cell_param[index_owner].v
+            p = gn*self.cell_param[index_neighbour].p + go*self.cell_param[index_owner].p
+            return Parametres(T,p,v)
 
 # Cell
     def get_grad_cell(self,cell_index, var)->np.array:
         """Calcul du gradient d'une variable dans la cellule"""
 
-        grad = np.zeros(2)
-        cell_faces = self.mesh.cells[cell_index].faces
-        for i in range(len(self.faces)):
-            f = self.mesh.faces[cell_faces[i]]
-            sign = f.owner == cell_index
+        grad = np.zeros(2,dtype=float)
+        cell = self.mesh.cells[cell_index]
+        cell_faces_index = cell.faces
+        for i in range(len(cell_faces_index)):
+            f = self.mesh.faces[cell_faces_index[i]]
+            outward_face = (f.owner == cell_index)
+            if outward_face :
+                sign = 1
+            else : 
+                sign = -1
             grad += sign * f.surface * self.get_face_param(f.indice_global).get_var(var)
-        grad /= self.volume
+        grad /= cell.volume
             
         return grad
 
@@ -86,8 +102,7 @@ class Sim():
         if chrono:
             t = time.time()
         grad = np.zeros((len(self.mesh.cells),2))
-        for i in range(len(self.mesh.faces)):
-            f = self.mesh.faces[i]
+        for i,f in enumerate(self.mesh.faces):
             flux_f = self.get_face_param(i).get_var(var)*f.surface
             if f.owner != -1:
                 grad[f.owner] += flux_f
@@ -101,8 +116,37 @@ class Sim():
                 
         return grad 
     
-    def set_var(self,var:str,values:np.array,x,y)->None:
+
+    
+    # def set_var(self,var:str,value:np.array,x,y)->None:
+    #     """Set the value of a variable in the mesh at a given point"""
+    #     cell_index = self.mesh.find_cell(x,y)
+    #     if cell_index != None:
+    #         self.cell_param[cell_index].set_var(var,value)
+    #     return None
+    
+    def set_var(self,var:str,value:np.array,*args)->None:
         """Set the value of a variable in the mesh at a given point"""
+
+        if len(args)==1 and isinstance(args[0],int):
+            # On utilise l'indice de la cellule
+            cell_index = args[0]
+            self.cell_param[cell_index].set_var(var,value)
+            return None
+        
+        # On utilise les coordonnees de la cellule
+        if len(args) == 1 and isinstance(args[0],np.ndarray) and args[0].shape == (2,):
+            x = args[0][0]
+            y = args[0][1]
+        if len(args) == 1 and isinstance(args[0],list) and len(args[0]) == 2:
+            x = args[0][0]
+            y = args[0][1]
+        elif len(args) == 2 and isinstance(args[0],float) and isinstance(args[1],float):
+            x = args[0]
+            y = args[1]
+        cell_index = self.mesh.find_cell(x,y)
+        if cell_index != None:
+            self.cell_param[cell_index].set_var(var,value)
         return None
     
     def set_CI(self,var,*args)-> None:

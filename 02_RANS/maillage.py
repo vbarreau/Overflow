@@ -113,8 +113,6 @@ class Mesh():
             cells[i] = self.Cell(i, cells_ref[i], nodes_of_cell,voisins,nodes)
         return nodes, faces, cells
 
-
-
     def  mesh_read_nodes(self,filename:str)->np.array:
         """Lecture du maillage à partir d'un fichier"""
         lines = open(filename, 'r').readlines()
@@ -128,8 +126,6 @@ class Mesh():
 
         return nodes
     
-
-
     def set_mesh_volume(self)->None:
         """Calcul du volume de chaque cellule"""
         self.cell_volume = np.zeros(len(self.cells))
@@ -194,25 +190,23 @@ class Mesh():
                     self.owner = self.cells[0]
                     self.neighbour = self.cells[1]
 
-
     class Cell():
         def __init__(self,i:int,faces_index:list,nodes_index:list,voisins:list,nodes:np.array):
             self.indice_global = i
             self.faces = np.array(faces_index)
-            self.nodes = np.array(nodes_index)
+            self.nodes_index = np.array(nodes_index)
             self.voisins = np.array(voisins)
-            self.centroid = np.mean(nodes[self.nodes], axis=0)
+            self.centroid = np.mean(nodes[self.nodes_index], axis=0)
             self.sort_nodes(nodes)
             self.volume = self.get_volume(nodes)
-
-
+            
         def __repr__(self):
-            return f"Cell {self.indice_global} : \nfaces : {self.faces}\nNoeuds : {self.nodes}\nVoisins : {self.voisins}\n"
+            return f"Cell {self.indice_global} : \nfaces : {self.faces}\nNoeuds : {self.nodes_index}\nVoisins : {self.voisins}\n"
         
         def sort_nodes(self,nodes:np.array)->None:
             """Tri des noeuds de la cellule dans le sens trigonométrique"""
             # On prend le premier noeud comme référence
-            nodes = nodes[self.nodes]
+            nodes = nodes[self.nodes_index]
             c_node = centre(nodes)
 
             # On calcule les angles
@@ -222,15 +216,29 @@ class Mesh():
                 angles[i] = np.arctan2(nodes[i][1]-c_node[1], nodes[i][0]-c_node[0])
             # On trie les noeuds en fonction des angles
             sorted_indices = np.argsort(angles)
-            self.nodes = self.nodes[sorted_indices]
+            self.nodes_index = self.nodes_index[sorted_indices]
 
 
         def get_volume(self,nodes:np.array)->float:
-            nodes = nodes[self.nodes]
+            nodes = nodes[self.nodes_index]
             V = surface_triangle(nodes[0], nodes[1], nodes[2])
             for i in range(3, len(nodes)):
                 V += surface_triangle(nodes[0], nodes[i-1], nodes[i])
             return V
+        
+        def contains(self, x,y,nodes)->bool:
+            """Vérifie si le point (x,y) est dans la cellule"""
+            node = np.array([x,y]) 
+            angles = np.zeros(len(self.nodes_index))
+            for i in range(len(self.nodes_index)):
+                i_node = self.nodes_index[i]
+                # On calcule l'angle entre le noeud, le centre de la cellule et son horizontale
+                angles[i] = np.arctan2(node[1]-nodes[i_node][1], node[0]-nodes[i_node][0])
+            delta = abs(max(angles) - min(angles))
+            if delta >= np.pi:
+                return True
+            else:
+                return False
         
     def span(self):
         """Calcul de l'étendue du maillage"""
@@ -240,31 +248,63 @@ class Mesh():
         y_max = np.max(self.nodes[:,1])
         return x_min, x_max, y_min, y_max
     
-    def plot_mesh(self,ax=None)->None:
-        """Affichage du maillage"""
+    def plot_mesh(self, ax=None) -> None:
+        """Enhanced visualization of the mesh."""
+        offset = 0.02
         if ax is None:
-            fig, ax = plt.subplots()
-        for i in range(len(self.cells)):
-            cell = (self.cells[i])
+            fig, ax = plt.subplots(figsize=(8, 8))  # Larger figure size for better visibility
+
+        # Plot cells and faces
+        for i, cell in enumerate(self.cells):
             faces = self.faces[cell.faces]
-            for f in faces :
+            for f in faces:
                 nodes = self.nodes[f.nodes_index]
-                ax.plot(nodes[:,0], nodes[:,1], 'k-')
-                ax.fill(nodes[:,0], nodes[:,1], alpha=0.2)
-        for i in range(len(self.nodes)):
-            node = self.nodes[i]
-            ax.plot(node[0], node[1], 'ro', markersize=1)
+                centre = f.centroid
+                ax.plot(nodes[:, 0], nodes[:, 1], color="black", linewidth=1)  # Cell boundaries
+                ax.text(centre[0]-offset, centre[1]-offset, f"{f.indice_global}", color="k", fontsize=8, ha="center", va="center")  # face labels
+
+        # Plot nodes
+        for i, node in enumerate(self.nodes):
+            ax.plot(node[0], node[1], 'ro', markersize=4)  # Nodes as red dots
+            ax.text(node[0]+offset, node[1]+offset, f"{i}", color="red", fontsize=8, ha="center", va="center")  # Node labels
+
+        # Set aspect ratio and grid
         ax.set_aspect('equal', adjustable='box')
-        return ax   
-    
-    def complete_plot(self) -> None :
+        ax.grid(visible=True, linestyle="--", linewidth=0.5, alpha=0.7)
+        ax.set_xlabel("X-axis")
+        ax.set_ylabel("Y-axis")
+        ax.set_title("Mesh Visualization", fontsize=14, fontweight="bold")
+        return ax
+
+    def complete_plot(self) -> None:
+        """Enhanced complete plot with normals and labels."""
         ax = self.plot_mesh()
-        ax.set_title("Maillage")
+        ax.set_title("Mesh with Normals", fontsize=14, fontweight="bold")
+        offset = 0.05
+
+        # Add normals to faces
         for face in self.faces:
             normal = face.get_normal(self.nodes)
             centroid = face.centroid
-            ax.quiver(centroid[0], centroid[1], normal[0], normal[1], angles='xy', scale_units='xy', scale=1, color='blue')
-        return ax
+            ax.quiver(
+                centroid[0], centroid[1], normal[0], normal[1],
+                angles='xy', scale_units='xy', scale=2, color='blue', alpha=0.5, 
+                label="Face Normal", width=0.005
+            )
+
+        # Add cell centroids
+        for i, cell in enumerate(self.cells):
+            ax.plot(cell.centroid[0], cell.centroid[1], 'kx', markersize=6)  # Centroids as black crosses
+            ax.text(cell.centroid[0]+offset, cell.centroid[1]+offset, f"C{i}", color="green", fontsize=10, ha="center", va="center")  # Cell labels
+
+        plt.legend(["Cell Boundaries", "Face Normals", "Nodes", "Cell Centroids"], loc="upper right", fontsize=8)
+        plt.show()
+    
+    def find_cell(self,x:float,y:float)->int:
+        for i in range(len(self.cells)):
+            cell = self.cells[i]
+            if cell.contains(x,y,self.nodes):
+                return i
 
 class MeshError(Exception):
     """Classe d'erreur pour le maillage"""
