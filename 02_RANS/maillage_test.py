@@ -87,6 +87,8 @@ def test_set_owner():
         assert f1.owner == 1
     else:
         assert f1.owner == 0
+    assert f0.owner == 0
+    assert f2.owner == 0 
 
 
 def test_contains():
@@ -114,3 +116,5 @@ def test_surface():
     assert Sf1[0] == -1
     assert Sf1[1] == -1
     assert f1.owner == 1
+
+

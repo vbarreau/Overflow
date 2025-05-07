@@ -97,22 +97,17 @@ class Sim():
 
 # Mesh
 
-    def compute_gradient(self, var:str,chrono=False)->np.array:
+    def compute_gradient(self, var:str)->np.array:
         """Calcul du gradient d'une variable dans la cellule"""
-        if chrono:
-            t = time.time()
         grad = np.zeros((len(self.mesh.cells),2))
         for i,f in enumerate(self.mesh.faces):
             flux_f = self.get_face_param(i).get_var(var)*f.surface
-            if f.owner != -1:
+            if f.owner != -1 :
                 grad[f.owner] += flux_f
-                grad[f.neighbour] -= flux_f
-            else:
+            if f.neighbour != -1 :
                 grad[f.neighbour] -= flux_f
         grad[:,0] /= self.mesh.cell_volume
         grad[:,1] /= self.mesh.cell_volume
-        if chrono:
-            print(f"Temps de calcul du gradient : {time.time()-t} s")
                 
         return grad 
     

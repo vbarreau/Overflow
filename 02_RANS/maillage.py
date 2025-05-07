@@ -35,7 +35,9 @@ def get_paraph(meshdat) :
             c = i
     return n,f,c
 
-
+def points_toward_cell(centre_cell,centre_face,normale) :
+    vec = centre_cell -centre_face
+    return np.dot(vec,normale)>0
 
 
 class Mesh():
@@ -170,20 +172,21 @@ class Mesh():
                 self.neighbour = self.cells[0]
             except :
                 raise MeshError("La face n'a pas de cellule contiguë")
-            
+            normale = self.get_normal(nodes)
             if len(self.cells) == 1:
                 self.owner = self.cells[0]
                 self.neighbour = -1
+                # Ensure the surface vector points outward the owner cell
+                
+                if points_toward_cell(cells[self.cells[0]].centroid,self.centroid,normale):
+                    self.surface = -self.length(nodes) * self.get_normal(nodes)
             elif len(self.cells) == 2:
                 cell0 = cells[self.cells[0]]
                 cell1 = cells[self.cells[1]]
                 c0 = cell0.centroid
                 c1 = cell1.centroid
 
-                vec = self.centroid + self.get_normal(nodes) * 0.1
-                d0 = np.linalg.norm(c0 - vec)
-                d1 = np.linalg.norm(c1 - vec)
-                if d0 < d1:
+                if points_toward_cell(cells[self.cells[0]].centroid,self.centroid,normale):
                     self.owner = self.cells[1]
                     self.neighbour = self.cells[0]
                 else:
@@ -314,21 +317,32 @@ class MeshError(Exception):
 
 
 if __name__ ==  "__main__" :
-    mesh = Mesh("D:/OneDrive/Documents/11-Codes/overflow/02_RANS/circle_mesh.dat")
-    cell = mesh.cells[0]
-    print( "Volume cellule : " , cell.volume)  # Affiche la surface du triangle
-    print("centre de la cellule : ",cell.centroid)  # Affiche le centre de gravité du triangle
     
-    face1 = mesh.faces[0]
-    print(face1.__repr__())  
-    print(f"normale 1 : {face1.get_normal(mesh.nodes)}")
-    print(f"Owner face 1 : {face1.owner}\n")  
-    face2 = mesh.faces[1]
-    print(face2.__repr__())
-    print(f"normale 2 : {face2.get_normal(mesh.nodes)}")
-    print(f"Owner face 2 : {face2.owner}")
-    print()
-    
-    print(cell.__repr__())  # Affiche la cellule
+    node1 = np.array([0, 0])
+    node2 = np.array([1, 0])
+    node3 = np.array([0, 1])
+    nodes = np.array([[0, 0], [1, 0], [0, 1], [1, 1], [0, 2], [1, 2], [2, 1], [2, 0]])
+    f0 = Mesh.Face(0, [0, 1], [0], nodes)
+    f1 = Mesh.Face(1, [1, 2], [0, 1], nodes)
+    f2 = Mesh.Face(2, [0, 2], [0], nodes)
+    f3 = Mesh.Face(3, [1, 3], [1, 3], nodes)
+    f4 = Mesh.Face(4, [2, 3], [1, 2], nodes)
+    f5 = Mesh.Face(5, [2, 4], [2], nodes)
+    f6 = Mesh.Face(6, [4, 5], [2], nodes)
+    f7 = Mesh.Face(7, [3, 5], [2], nodes)
+    f8 = Mesh.Face(8, [3, 6], [3], nodes)
+    f9 = Mesh.Face(9, [6, 7], [3], nodes)
+    f10 = Mesh.Face(10, [1, 7], [3], nodes)
+
+    faces = np.array([f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10])
+
+    cell0 = Mesh.Cell(0, [0, 1, 2], [0, 1, 2], [1], nodes)
+    cell1 = Mesh.Cell(1, [1, 3, 4], [1, 3, 2], [0, 2], nodes)
+    cell2 = Mesh.Cell(2, [4, 5, 6, 7], [2, 3, 4, 5], [1], nodes)
+    cell3 = Mesh.Cell(3, [3, 8, 9, 10], [1, 3, 6, 7], [1], nodes)
+
+    cells = np.array([cell0, cell1, cell2, cell3])
+
+    mesh = Mesh(cells=cells, nodes=nodes, faces=faces)
 
     mesh.plot_mesh()  # Affiche le maillage

@@ -104,12 +104,12 @@ def test_compute_gradient():
 
     gradT = sim.compute_gradient('T')
     expected = np.array([-5/3,-5/3])
-    assert (gradT[1] == expected).all()
+    np.testing.assert_array_almost_equal(gradT[1] , expected)
 
-# if __name__=="__main__" :
+if __name__=="__main__" :
     
-#     mesh.complete_plot()
-#     plt.show()
+    mesh.complete_plot()
+    plt.show()
 
 
 
