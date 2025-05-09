@@ -28,7 +28,7 @@ def test_init():
     assert len(sim.cell_param) == len(mesh.cells)
     assert sim.cell_param[0].T == 200
     assert sim.cell_param[0].p == 1e5
-    np.testing.assert_array_equal(sim.cell_param[0].v, vecteur_nul)
+    np.testing.assert_array_equal(sim.cell_param[0].vx, 0)
 
 
 def test_set_var():
@@ -62,7 +62,7 @@ def test_get_face_param():
     assert isinstance(face_param, Parametres)
     assert face_param.T == 200
     assert face_param.p == 1e5
-    np.testing.assert_array_almost_equal(face_param.v, vecteur_nul)
+    assert face_param.vx == 0
 
     sim.set_var("T", 3, 0)
     sim.set_var("T", 2, 1)
@@ -105,6 +105,32 @@ def test_compute_gradient():
     gradT = sim.compute_gradient('T')
     expected = np.array([-5/3,-5/3])
     np.testing.assert_array_almost_equal(gradT[1] , expected)
+
+    sim.set_var("vx", 3, 0)
+    sim.set_var("vx", 2, 1)
+    sim.set_var("vx", 1, 2)
+    sim.set_var("vx", 1, 3)
+    gradVx = sim.compute_gradient('vx')
+    np.testing.assert_array_almost_equal(gradVx[1] , expected)
+
+def test_deformation():
+    sim = Sim(mesh=mesh)
+    sim.set_var("vx", 3, 0)
+    sim.set_var("vx", 2, 1)
+    sim.set_var("vx", 1, 2)
+    sim.set_var("vx", 1, 3)
+    sim.compute_gradient()
+    for i in range(1,sim.mesh.size):
+        assert (sim.cell_param[i].get_var('gradVx')!=0).any() ,f"Gradient nul en cellule {i}\n"
+    sim.compute_tensors()
+
+    s1 = sim.cell_param[1].get_var('S')
+    print(f'S en cellule 1 :\n{s1}\n ')
+    W1 = sim.cell_param[1].get_var('Omega')
+    print(f'Omega en cellule 1 :\n{W1}\n ')
+    assert (s1!=0).any()
+    #  tester avec des vrais valeurs
+
 
 if __name__=="__main__" :
     

@@ -3,38 +3,184 @@ sys.path.append(r"D:/OneDrive/Documents/11-Codes/overflow/02_RANS")
 from maillage import *
 import time
 
+XI          = 0
+f_beta      = 1
+alpha       = 13 / 25
+beta_0      = 0.0708
+beta        = beta_0
+beta_star   = 0.09
+sigma       = 0.5
+sigma_star  = 0.6
+sigma_do    = 1 / 8
+C_lim       = 7 / 8
+
+
 class Parametres:
     """Classe pour les parametres de la cellule"""
-    def __init__(self,T:float=200,p:float=1e5,v:np.array=np.array([0,0]))->None:
+    def __init__(self, T: float = 200, p: float = 1e5, vx: float = 0, vy: float = 0) -> None:
         self.T = T
         self.p = p
-        self.v = v
-        self.rho = p/(287.05*T)
-    def get_var(self,var:str)->float:
+        self.vx = vx
+        self.vy = vy
+        self.rho = p / (287.05 * T)
+        self.gradT = np.ones(2)
+        self.gradP = np.zeros(2)
+        self.gradVx = 0
+        self.gradVy = 0
+        self.grad_rho = np.zeros(2)
+        self.S = np.zeros((2, 2))  # Tenseur des deformations
+        self.Omega = np.zeros((2, 2))  # Tenseur de vorticité
+        self.tau = np.zeros((2, 2))  # New tensor attribute
+        
+        # New attributes
+        self.k = 0.0          # Turbulent kinetic energy
+        self.w = 0.0          # Specific dissipation rate
+        self.w_bar = 1.0
+        self.Nu_t = 0.0       # Turbulent viscosity
+        self.f_beta = 0.0     # Beta function
+        self.xi_omega = 0.0   # Xi omega parameter
+        self.grad_k = np.zeros(2)       # Gradient of turbulent kinetic energy
+        self.grad_w = np.zeros(2)       # Gradient of specific dissipation rate
+        self.epsilon = 0.0    # Dissipation rate
+        self.l = 0.0          # Turbulence length scale
+        self.sigma_d = 0.0    # Scalar parameter
+
+    def get_var(self, var: str):
         """Renvoie la variable de la cellule"""
         if var == "T":
             return self.T
         elif var == "p":
             return self.p
+        elif var == "vx":
+            return self.vx
+        elif var == "vy":
+            return self.vy
         elif var == "v":
-            return self.v
+            return np.array([self.vx, self.vy])
         elif var == "rho":
             return self.rho
+        elif var == "gradT":
+            return self.gradT
+        elif var == "gradP":
+            return self.gradP
+        elif var == "gradVx":
+            return self.gradVx
+        elif var == "gradVy":
+            return self.gradVy
+        elif var == "grad_rho":
+            return self.grad_rho
+        elif var == "S":
+            return self.S
+        elif var == "Omega":
+            return self.Omega
+        elif var == "tau":
+            return self.tau
+        elif var == "k":
+            return self.k
+        elif var == "w":
+            return self.w
+        elif var == "Nu_t":
+            return self.Nu_t
+        elif var == "f_beta":
+            return self.f_beta
+        elif var == "xi_omega":
+            return self.xi_omega
+        elif var == "grad_k":
+            return self.grad_k
+        elif var == "grad_omega":
+            return self.grad_w
+        elif var == "epsilon":
+            return self.epsilon
+        elif var == "l":
+            return self.l
+        elif var == "sigma_d":
+            return self.sigma_d
         else:
             raise ValueError(f"Variable {var} non reconnue")
-        
-    def set_var(self,var:str,value:float)->None:
+
+    def set_var(self, var: str, value) -> None:
         """Set the value of a variable in the cell"""
-        if var == "T":
-            self.T = value
-        elif var == "p":
-            self.p = value
-        elif var == "v":
-            self.v = value
-        elif var == "rho":
-            self.rho = value
+        if isinstance(value, (float, int, np.float64)):
+            if var == "T":
+                self.T = value
+            elif var == "p":
+                self.p = value
+            elif var == "rho":
+                self.rho = value
+            elif var == "vx":
+                self.vx = value
+            elif var == "vy":
+                self.vy = value
+            elif var == "k":
+                self.k = value
+            elif var == "w":
+                self.w = value
+            elif var == "Nu_t":
+                self.Nu_t = value
+            elif var == "f_beta":
+                self.f_beta = value
+            elif var == "xi_omega":
+                self.xi_omega = value
+            elif var == "epsilon":
+                self.epsilon = value
+            elif var == "l":
+                self.l = value
+            elif var == "sigma_d":
+                self.sigma_d = value
+            else:
+                raise ValueError(f"Variable {var} non reconnue, type {type(value)}")
+
+        elif isinstance(value, np.ndarray) and value.shape == (2,):
+            if var == "gradT":
+                self.gradT = value
+            elif var == "gradP" or var == "gradp":
+                self.gradP = value
+            elif var == "gradVx" or var == "gradvx":
+                self.gradVx = value
+            elif var == "gradVy" or var == "gradvy":
+                self.gradVy = value
+            elif var == "grad_rho" or var == "gradrho":
+                self.grad_rho = value
+            elif var == "grad_k":
+                self.grad_k = value
+            elif var == "grad_omega" or var == 'grad_w':
+                self.grad_w = value
+            elif var == "v" or var == "V":
+                self.vx = value[0]
+                self.vy = value[1]
+            else:
+                raise ValueError(f"Variable {var} non reconnue, type {type(value)}")
+
+        elif isinstance(value, np.ndarray) and value.shape == (2, 2):
+            if var == "S":
+                self.S = value
+            elif var == "Omega":
+                self.Omega = value
+            elif var == "tau":
+                self.tau = value
+            else:
+                raise ValueError(f"Variable {var} non reconnue, type {type(value)}")
+
         else:
-            raise ValueError(f"Variable {var} non reconnue")
+            raise ValueError(f"type {type(value)} non reconnue pour {var}")
+
+    def update_values(self)-> None:    
+        k = self.k
+        w = self.w
+        self.epsilon = beta_star*w*k
+        self.l = np.sqrt(k)/w 
+        check = 0
+        grad_k = self.grad_k
+        grad_w = self.grad_w
+        check  = np.dot(grad_k,grad_w).sum()
+        if check <= 0 :
+            self.sigma_d = 0
+        else :
+            self.sigma_d = sigma_do
+        
+        self.w_bar = np.max(self.w,C_lim*np.sqrt(2*(self.S*self.S).sum/beta_star))
+        self.Nu_t = self.k / self.w_bar
+        self.tau = 2*self.Nu_t*self.S - 2/3 * self.k * np.eye(2)
 
 
 class Sim():
@@ -50,7 +196,6 @@ class Sim():
         else:
             raise ValueError("Invalid arguments: expected 'filename' or 'mesh' as input.")
         self.cell_param = [Parametres() for _ in range(len(self.mesh.cells))]
-
 
 # Face
     def get_face_param(self,face_index:int)->Parametres: 
@@ -71,9 +216,10 @@ class Sim():
             gn = Vo/(Vo + Vn)
             go = 1-gn
             T = gn*self.cell_param[index_neighbour].T + go*self.cell_param[index_owner].T
-            v = gn*self.cell_param[index_neighbour].v + go*self.cell_param[index_owner].v
+            vx = gn*self.cell_param[index_neighbour].vx + go*self.cell_param[index_owner].vx
+            vy = gn*self.cell_param[index_neighbour].vy + go*self.cell_param[index_owner].vy
             p = gn*self.cell_param[index_neighbour].p + go*self.cell_param[index_owner].p
-            return Parametres(T,p,v)
+            return Parametres(T,p,vx,vy)
 
 # Cell
     def get_grad_cell(self,cell_index, var)->np.array:
@@ -94,35 +240,64 @@ class Sim():
             
         return grad
 
-
 # Mesh
-
-    def compute_gradient(self, var:str)->np.array:
+    def compute_gradient(self, *args)->np.array:
         """Calcul du gradient d'une variable dans la cellule"""
-        grad = np.zeros((len(self.mesh.cells),2))
-        for i,f in enumerate(self.mesh.faces):
-            flux_f = self.get_face_param(i).get_var(var)*f.surface
-            if f.owner != -1 :
-                grad[f.owner] += flux_f
-            if f.neighbour != -1 :
-                grad[f.neighbour] -= flux_f
-        grad[:,0] /= self.mesh.cell_volume
-        grad[:,1] /= self.mesh.cell_volume
-                
-        return grad 
+        if len(args)==1 :
+            var = args[0]
+            grad = np.zeros((len(self.mesh.cells),2))
+            for i,f in enumerate(self.mesh.faces):
+                flux_f = self.get_face_param(i).get_var(var)*f.surface
+                if f.owner != -1 :
+                    grad[f.owner] += flux_f
+                if f.neighbour != -1 :
+                    grad[f.neighbour] -= flux_f
+            grad[:,0] /= self.mesh.cell_volume
+            grad[:,1] /= self.mesh.cell_volume
+            var_grad = "grad"+var
+            for i in range(len(grad)):
+                self.cell_param[i].set_var(var_grad,grad[i]) 
+            return grad
+        elif len(args)==0 :
+            all_var = ['vx','vy','T','p','rho']
+            return [self.compute_gradient(s) for s in all_var]
     
+    def set_cell_tensor(self,cell_index):
+        cell_values = self.cell_param[cell_index]
+        gradV = np.zeros((2,2))
+        gradV[0] = cell_values.gradVx
+        gradV[1] = cell_values.gradVy
+        S = np.zeros((2,2))
+        W = np.zeros((2,2))
+        for i in range(2):
+            for j in range(2):
+                t1 = gradV[i,j]
+                t2 = gradV[j,i]
+                S[i,j] = t1 + t2 
+                if i!=j :
+                    W[i,j] = t1-t2
+        S = 0.5*S 
+        W = 0.5*W
+        self.cell_param[cell_index].set_var("S",S) 
+        self.cell_param[cell_index].set_var("Omega",W) 
+        return
+    
+    def compute_tensors(self) : 
+        for cell_index in range(self.mesh.size) :
+            self.set_cell_tensor(cell_index)
+        return
+    
+    def update_all_param(self):
+        self.compute_gradient()
+        self.compute_tensors()
 
-    
-    # def set_var(self,var:str,value:np.array,x,y)->None:
-    #     """Set the value of a variable in the mesh at a given point"""
-    #     cell_index = self.mesh.find_cell(x,y)
-    #     if cell_index != None:
-    #         self.cell_param[cell_index].set_var(var,value)
-    #     return None
+        for cell in self.cell_param:
+            cell.update_values()
+            
+
     
     def set_var(self,var:str,value:np.array,*args)->None:
         """Set the value of a variable in the mesh at a given point"""
-
         if len(args)==1 and isinstance(args[0],int):
             # On utilise l'indice de la cellule
             cell_index = args[0]
@@ -130,7 +305,7 @@ class Sim():
             return None
         
         # On utilise les coordonnees de la cellule
-        if len(args) == 1 and isinstance(args[0],np.ndarray) and args[0].shape == (2,):
+        elif len(args) == 1 and isinstance(args[0],np.ndarray) and args[0].shape == (2,):
             x = args[0][0]
             y = args[0][1]
         if len(args) == 1 and isinstance(args[0],list) and len(args[0]) == 2:
@@ -166,7 +341,6 @@ class Sim():
         return None
 
     # Plotting
-    
     def plot(self, var:str,ax = None,chrono=False)->None:
         """Plot the mesh with the variable"""
         if chrono:
@@ -176,7 +350,7 @@ class Sim():
         
         x = [cell.centroid[0] for cell in self.mesh.cells]
         y = [cell.centroid[1] for cell in self.mesh.cells]
-        values = [self.cell_param[i].get_var(var) for i in range(len(self.mesh.cells))]
+        values = [np.linalg.norm(self.cell_param[i].get_var(var)) for i in range(len(self.mesh.cells))]
         
         sc = ax.scatter(x, y, c=values, cmap='viridis', s=10)
         plt.colorbar(sc, ax=ax, label=var)
@@ -186,20 +360,38 @@ class Sim():
 
 def radial_CI(x,y,A=1)->float:
     """Fonction de condition initiale radiale"""
-
     r = np.sqrt((x-20)**2 + (y-10)**2)
-    return A*np.exp(-(r-2)**2/4)
+    return A*np.exp(-(r-2)**2/10)
     
+def lin_en_y(x,y,A=1):
+    return A*y
+
+def CI_qui_deforme(x,y,A=1) :
+    return lin_en_y(x,y,A/5)  + radial_CI(x,y,A*10)
 
 if __name__ == "__main__":
-    
     sim = Sim(filename = "D:/OneDrive/Documents/11-Codes/overflow/02_RANS/circle_mesh.dat")
     sim.set_CI("T",radial_CI)
     gradient = sim.compute_gradient("T")
-    fig , ax = plt.subplots()
+    print(f"gradient max = {gradient.max()}")
+    fig , ax = plt.subplots(2,2)
     # sim.mesh.plot_mesh(ax=ax)
-    sim.plot("T",ax=ax)
-    ax.set_aspect('equal', adjustable='box')
-    ax.set_title("Gradient de T")
+    sim.plot("T",ax=ax[0,0])
+    sim.plot("gradT",ax=ax[0,1])
+    ax[0,0].set_aspect('equal', adjustable='box')
+    ax[0,1].set_aspect('equal', adjustable='box')
+    fig.suptitle("Gradient de T")
 
+    sim.set_CI("vx",CI_qui_deforme)
+    sim.plot("vx",ax=ax[1,0])
+    sim.compute_gradient("vx")
+    sim.compute_gradient("vy")
+    sim.compute_tensors()
+    sim.plot("S",ax=ax[1,1])
+    ax[1,0].set_aspect('equal', adjustable='box')
+    ax[1,1].set_aspect('equal', adjustable='box')
+
+    plt.tight_layout()
     plt.show()
+
+    

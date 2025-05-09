@@ -60,14 +60,18 @@ class Mesh():
             face.set_owner(self.nodes, self.cells)
         self.size = len(self.cells)
 
-    def read_mesh(self, filename:str)->None:
+    def read_mesh(self, filename:str,faces_per_cell = 4)->None:
         lines = open(filename, 'r').readlines()
         n,f,c = get_paraph(lines)
+        n_faces = c-f+1
+        n_cells = len(lines)-c+1
+
         nodes = self.mesh_read_nodes(filename)
-        faces_ref = np.zeros((c-f+1, 2 ), dtype=int)
-        cells_of_faces = np.zeros((c-f+1, 2 ), dtype=int)
+
+        faces_ref = np.zeros((n_faces, 2 ), dtype=int)
+        cells_of_faces = np.zeros((n_faces, 2 ), dtype=int)
         cells_of_faces[:,:] = -1
-        cells_ref = np.zeros((len(lines)-c+1, 3), dtype=int)
+        cells_ref = np.zeros((n_cells, faces_per_cell), dtype=int)
         n_count = 0
         f_count = 0
         for i in tqdm(range(len(lines)), desc="Lecture du maillage"):
@@ -85,11 +89,11 @@ class Mesh():
             elif line[0]=='c':
                 words = line.split()
                 c_count = int(words[0][1:])
-                cells_ref[c_count,0] = int(words[1])
-                cells_ref[c_count,1] = int(words[2])
-                cells_ref[c_count,2] = int(words[3])
-                for j in range(3):
-                    cells_of_faces[cells_ref[c_count,j]] = c_count
+                for j in range(faces_per_cell):
+                    face_index = int(words[j+1])
+                    cells_ref[c_count,j] = face_index
+                    cells_of_faces[face_index][np.where(cells_of_faces[face_index]==-1)[0][0]]=c_count
+                        
 
                 c_count += 1
 
