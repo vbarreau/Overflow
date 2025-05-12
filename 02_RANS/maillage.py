@@ -283,9 +283,9 @@ class Mesh():
         ax.set_title("Mesh Visualization", fontsize=14, fontweight="bold")
         return ax
 
-    def complete_plot(self) -> None:
+    def complete_plot(self,ax=None) -> None:
         """Enhanced complete plot with normals and labels."""
-        ax = self.plot_mesh()
+        ax = self.plot_mesh(ax=ax)
         ax.set_title("Mesh with Normals", fontsize=14, fontweight="bold")
         offset = 0.05
 
@@ -305,7 +305,6 @@ class Mesh():
             ax.text(cell.centroid[0]+offset, cell.centroid[1]+offset, f"C{i}", color="green", fontsize=10, ha="center", va="center")  # Cell labels
 
         plt.legend(["Cell Boundaries", "Face Normals", "Nodes", "Cell Centroids"], loc="upper right", fontsize=8)
-        plt.show()
     
     def find_cell(self,x:float,y:float)->int:
         for i in range(len(self.cells)):
