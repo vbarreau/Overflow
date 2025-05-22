@@ -29,9 +29,8 @@ class Parametres:
         self.B          = self.p + 0.5*RHO*(self.vx**2 + self.vy**2)  # Bernoulli constant
         self.gradT      = np.ones(2)
         self.gradP      = np.zeros(2)
-        self.gradVx     = np.zeros(2)
-        self.gradVy     = np.zeros(2)
-        self.grad_rho   = np.zeros(2)
+        self.gradvx     = np.zeros(2)
+        self.gradvy     = np.zeros(2)
         self.S          = np.zeros((2, 2))  # Tenseur des deformations
         self.Omega      = np.zeros((2, 2))  # Tenseur de vorticité
         self.tau        = np.zeros((2, 2))  # tenseur de turbulences
@@ -45,10 +44,10 @@ class Parametres:
         # self.epsilon    = 0.0           # Dissipation rate
         # self.l          = 0.0           # Turbulence length scale
         self.sigma_d    = 0.0           # Scalar parameter
-        self.grad_k     = np.zeros(2)   # Gradient of turbulent kinetic energy
-        self.grad_w     = np.zeros(2)   # Gradient of specific dissipation rate
-        self.gamma_k     = (NU + SIGMA_STAR*self.k/self.w)*self.grad_k
-        self.gamma_w     = (NU + SIGMA * self.k/self.w)*self.grad_w  
+        self.gradk     = np.zeros(2)   # Gradient of turbulent kinetic energy
+        self.gradw     = np.zeros(2)   # Gradient of specific dissipation rate
+        self.gamma_k     = (NU + SIGMA_STAR*self.k/self.w)*self.gradk
+        self.gamma_w     = (NU + SIGMA * self.k/self.w)*self.gradw  
 
         self.condition = [] 
 
@@ -60,134 +59,15 @@ class Parametres:
             return
 
     
-    def get_var(self, var: str):
-        """Renvoie la variable de la cellule"""
-        if var == "T":
-            return self.T
-        elif var == "p":
-            return self.p
-        elif var == "vx":
-            return self.vx
-        elif var == "vy":
-            return self.vy
-        elif var == "v" or var == "V":
-            return np.array([self.vx, self.vy])
-        elif var == "gradT":
-            return self.gradT
-        elif var == "gradP":
-            return self.gradP
-        elif var == "gradVx":
-            return self.gradVx
-        elif var == "gradVy":
-            return self.gradVy
-        elif var == "grad_rho":
-            return self.grad_rho
-        elif var == "S":
-            return self.S
-        elif var == "Omega":
-            return self.Omega
-        elif var == "tau":
-            return self.tau
-        elif var == "k":
-            return self.k
-        elif var == "w":
-            return self.w
-        elif var == "Nu_t":
-            return self.Nu_t
-        elif var == "f_beta":
-            return self.f_beta
-        elif var == "xi_omega":
-            return self.xi_omega
-        elif var == "grad_k":
-            return self.grad_k
-        elif var == "grad_omega" or var == 'grad_w' or var == 'gradw':
-            return self.grad_w
-        elif var == "sigma_d":
-            return self.sigma_d
-        elif var == "gamma_k":
-            return self.gamma_k
-        elif var == "gamma_w":
-            return self.gamma_w
-        else:
-            raise ValueError(f"Variable {var} non reconnue")
-        
     def w_bar_min(self) -> float:
         """Renvoie la valeur minimale de w_bar"""
         s2 = (self.S*self.S).sum()
         return CLIM*np.sqrt(2*s2/BETA_STAR)
 
-    def set_var(self, var: str, value) -> None:
-        """Set the value of a variable in the cell"""
-        if isinstance(value, (float, int, np.float64)):
-            if var == "T":
-                self.T = value
-            elif var == "p":
-                self.p = value
-            elif var == "vx":
-                self.vx = value
-            elif var == "vy":
-                self.vy = value
-            elif var == "k":
-                self.k = value
-            elif var == "w":
-                self.w = value
-            elif var == "Nu_t":
-                self.Nu_t = value
-            elif var == "f_beta":
-                self.f_beta = value
-            elif var == "xi_omega":
-                self.xi_omega = value
-            elif var == "epsilon":
-                self.epsilon = value
-            elif var == "l":
-                self.l = value
-            elif var == "sigma_d":
-                self.sigma_d = value
-            else:
-                raise ValueError(f"Variable {var} non reconnue, type {type(value)}")
-
-        elif isinstance(value, np.ndarray) and value.shape == (2,):
-            if var == "gradT":
-                self.gradT = value
-            elif var == "gradP" or var == "gradp":
-                self.gradP = value
-            elif var == "gradVx" or var == "gradvx":
-                self.gradVx = value
-            elif var == "gradVy" or var == "gradvy":
-                self.gradVy = value
-            elif var == "grad_rho" or var == "gradrho":
-                self.grad_rho = value
-            elif var == "grad_k" or var == "gradk":
-                self.grad_k = value
-            elif var == "grad_omega" or var == 'grad_w' or var == 'gradw':
-                self.grad_w = value
-            elif var == "v" or var == "V":
-                self.vx = value[0]
-                self.vy = value[1]
-            elif var == 'gamma_k':
-                self.gamma_k = value
-            elif var == 'gamma_w':
-                self.gamma_w = value
-            else:
-                raise ValueError(f"Variable {var} non reconnue, type {type(value)}")
-
-        elif isinstance(value, np.ndarray) and value.shape == (2, 2):
-            if var == "S":
-                self.S = value
-            elif var == "Omega":
-                self.Omega = value
-            elif var == "tau":
-                self.tau = value
-            else:
-                raise ValueError(f"Variable {var} non reconnue, type {type(value)}")
-
-        else:
-            raise ValueError(f"type {type(value)} non reconnue pour {var}")
-        
     def set_cell_tensor(self):
         gradV = np.zeros((2,2))
-        gradV[0] = self.gradVx
-        gradV[1] = self.gradVy
+        gradV[0] = self.gradvx
+        gradV[1] = self.gradvy
         S = np.zeros((2,2))
         W = np.zeros((2,2))
         for i in range(2):
@@ -212,8 +92,8 @@ class Parametres:
         self.epsilon = BETA_STAR*w*k
         self.l = np.sqrt(k)/w 
         check = 0
-        grad_k = self.grad_k
-        grad_w = self.grad_w
+        grad_k = self.gradk
+        grad_w = self.gradw
         check  = np.dot(grad_k,grad_w).sum()
         if check <= 0 :
             self.sigma_d = 0
@@ -223,8 +103,8 @@ class Parametres:
         self.w_bar = max(self.w,self.w_bar_min())
         self.Nu_t = self.k / self.w_bar
         self.tau = 2*self.Nu_t*self.S - 2/3 * self.k * np.eye(2)
-        self.gamma_k     = (NU + SIGMA_STAR*self.k/self.w)*self.grad_k         # Turbulent kinetic energy production
-        self.gamma_w     = (NU + SIGMA * self.k/self.w)*self.grad_w           # Specific dissipation rate production
+        self.gamma_k     = (NU + SIGMA_STAR*self.k/self.w)*self.gradk         # Turbulent kinetic energy production
+        self.gamma_w     = (NU + SIGMA * self.k/self.w)*self.gradw           # Specific dissipation rate production
 
     def update_B(self)-> None:
         """Met a jour la constante de Bernoulli"""
@@ -296,7 +176,8 @@ class Etat():
                 sign = 1
             else : 
                 sign = -1
-            grad += sign * f.surface * self.get_face_param(f.indice_global).get_var(var)
+            val = getattr(self.get_face_param(f.indice_global),var)
+            grad += sign * f.surface * val
         grad /= cell.volume
             
         return grad
@@ -308,7 +189,8 @@ class Etat():
             var = args[0]
             grad = np.zeros((len(self.mesh.cells),2))
             for i,f in enumerate(self.mesh.faces):
-                flux_f = self.get_face_param(i).get_var(var)*f.surface
+                val = getattr(self.get_face_param(i),var)
+                flux_f = val*f.surface
                 if f.owner != -1 :
                     grad[f.owner] += flux_f
                 if f.neighbour != -1 :
@@ -317,7 +199,7 @@ class Etat():
             grad[:,1] /= self.mesh.cell_volume
             var_grad = "grad"+var
             for i in range(len(grad)):
-                self.cell_param[i].set_var(var_grad,grad[i]) 
+                setattr(self.cell_param[i],var_grad,grad[i])
             return grad
         elif len(args)==0 :
             all_var = ['vx','vy','T','p','k','w']
@@ -341,7 +223,7 @@ class Etat():
         if len(args)==1 and isinstance(args[0],int):
             # On utilise l'indice de la cellule
             cell_index = args[0]
-            self.cell_param[cell_index].set_var(var,value)
+            setattr(self.cell_param[cell_index], var, value)
             return None
         
         # On utilise les coordonnees de la cellule
@@ -355,8 +237,9 @@ class Etat():
             x = args[0]
             y = args[1]
         cell_index = self.mesh.find_cell(x,y)
+
         if cell_index != None:
-            self.cell_param[cell_index].set_var(var,value)
+            setattr(self.cell_param[cell_index], var, value)
         return None
     
     def set_CI(self,var,*args)-> None:
@@ -400,7 +283,7 @@ class Etat():
         x = [cell.centroid[0] for cell in self.mesh.cells]
         y = [cell.centroid[1] for cell in self.mesh.cells]
         
-        values = [np.linalg.norm(self.cell_param[i].get_var(var)) for i in range(len(self.mesh.cells))]
+        values = [np.linalg.norm(getattr(self.cell_param[i], var)) for i in range(len(self.mesh.cells))]
         
         sc = ax.scatter(x, y, c=values, cmap='viridis', s=point_size)
         plt.colorbar(sc, ax=ax, label=var)

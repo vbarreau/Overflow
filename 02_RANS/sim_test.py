@@ -32,8 +32,8 @@ def test_param_init():
     assert param.vy == 0
     assert (param.gradT == np.ones(2)).all()
     assert (param.gradP == np.zeros(2)).all()
-    assert (param.gradVx == np.zeros(2)).all()
-    assert (param.gradVy == np.zeros(2)).all()
+    assert (param.gradvx == np.zeros(2)).all()
+    assert (param.gradvy == np.zeros(2)).all()
     assert (param.grad_rho   == np.zeros(2)).all()
     assert (param.S          == np.zeros((2, 2)) ).all() # Tenseur des deformations
     assert (param.Omega      == np.zeros((2, 2)) ).all() # Tenseur de vorticité
@@ -47,25 +47,9 @@ def test_param_init():
     assert param.f_beta     == 0.0           # Beta function
     assert param.xi_omega   == 0.0           # Xi omega parameter
     assert param.sigma_d    == 0.0           # Scalar parameter
-    assert (param.grad_k     == np.zeros(2)).all()   # Gradient of turbulent kinetic energy
-    assert (param.grad_w     == np.zeros(2)).all()   # Gradient of specific dissipation rate
+    assert (param.gradk     == np.zeros(2)).all()   # Gradient of turbulent kinetic energy
+    assert (param.gradw     == np.zeros(2)).all()   # Gradient of specific dissipation rate
 
-
-def test_get_var():
-    """Test de la fonction get_var"""
-    param = Parametres()
-    assert param.get_var("T") == 200
-    assert param.get_var("p") == 1e5
-    assert param.get_var("vx") == 0
-    assert param.get_var("vy") == 0
-    np.testing.assert_array_equal(param.get_var("gradT"), np.ones(2))
-    np.testing.assert_array_equal(param.get_var("gradP"), np.zeros(2))
-    np.testing.assert_array_equal(param.get_var("gradVx"), np.zeros(2))
-    np.testing.assert_array_equal(param.get_var("gradVy"), np.zeros(2))
-    np.testing.assert_array_equal(param.get_var("grad_rho"), np.zeros(2))
-    np.testing.assert_array_equal(param.get_var("S"), np.zeros((2, 2)))
-    np.testing.assert_array_equal(param.get_var("Omega"), np.zeros((2, 2)))
-    np.testing.assert_array_equal(param.get_var("tau"), np.zeros((2, 2)))
 
 def test_set_var():
     """Test de la fonction set_var"""
@@ -96,29 +80,14 @@ def test_set_var():
     np.testing.assert_array_equal(param.get_var("Omega"), np.array([[5, 6], [7, 8]]))
     np.testing.assert_array_equal(param.get_var("tau"), np.array([[9, 10], [11, 12]]))
 
-def test_set_var_invalid():
-    """Test de la fonction set_var avec des variables invalides"""
-    param = Parametres()
-    with pytest.raises(ValueError):
-        param.set_var("invalid_var", 300)
-    with pytest.raises(ValueError):
-        param.set_var("T", "invalid_value")
-    with pytest.raises(ValueError):
-        param.set_var("vx", [1, 2, 3])
-    with pytest.raises(ValueError):
-        param.set_var("S", np.array([[1, 2], [3]]))
-    with pytest.raises(ValueError):
-        param.set_var("Omega", np.array([[1, 2], [3]]))
-    with pytest.raises(ValueError):
-        param.set_var("tau", np.array([[1, 2], [3]]))
 
 def test_set_cell_tensor():
     """Test the set_cell_tensor method for setting tensors for a specific cell."""
     param = Parametres()
     param.vx = 1
     param.vy = 2
-    param.gradVx = np.array([1, 2])
-    param.gradVy = np.array([2, 3])
+    param.gradvx = np.array([1, 2])
+    param.gradvy = np.array([2, 3])
     param.set_cell_tensor()
 
     expected_S = np.array([[1, 2], [2, 3]])
@@ -127,7 +96,7 @@ def test_set_cell_tensor():
     assert np.allclose(param.S, expected_S)
     assert np.allclose(param.Omega, expected_Omega)
 
-    param.gradVy = np.array([3, 4])
+    param.gradvy = np.array([3, 4])
     param.set_cell_tensor()
     expected_S = np.array([[1, 2.5], [2.5, 4]])
     expected_Omega[0,1] = -0.5
@@ -141,8 +110,8 @@ def test_update_values() :
     param = Parametres()
     param.k = 1
     param.w = 2
-    param.grad_k = np.array([1, 2])
-    param.grad_w = np.array([3, 4])
+    param.gradk = np.array([1, 2])
+    param.gradw = np.array([3, 4])
 
     param.update_values()
 
@@ -159,8 +128,8 @@ def test_update_values() :
     assert param.sigma_d == pytest.approx(expected_sigma_d, rel=1e-2)
     np.testing.assert_array_almost_equal(param.tau, expected_tau)
 
-    param.gradVx = np.array([1, 2])
-    param.gradVy = np.array([2, 3])
+    param.gradvx = np.array([1, 2])
+    param.gradvy = np.array([2, 3])
     param.set_cell_tensor() # S = [[1,2], [2,3]]
     param.update_values()
     assert param.w_bar == CLIM*20
@@ -188,24 +157,29 @@ def test_set_var():
     sim = Etat(mesh=mesh)
     sim.set_var("T", 0, 0.2, 0.1)
     sim.set_var("p", 2e5, 0.1, 0.1)
-    sim.set_var("v", np.array([1, 1]), 0.1, 0.1)
-    assert np.allclose(sim.cell_param[0].get_var("v"), np.array([1, 1]))
-    assert sim.cell_param[0].get_var("p") == pytest.approx(2e5)
-    assert sim.cell_param[0].get_var("T") == pytest.approx(0)
+    sim.set_var('vx',1,0.1,0.1)
+    sim.set_var('vy',1,0.1,0.1)
+    assert sim.cell_param[0].vx == 1
+    assert sim.cell_param[0].vy == 1    
+    assert sim.cell_param[0].p == pytest.approx(2e5)
+    assert sim.cell_param[0].T == pytest.approx(0)
 
     for i in range(1, 3):
-        assert pytest.approx(sim.cell_param[i].get_var("T")) == 200
-        assert pytest.approx(sim.cell_param[i].get_var("p")) == 1e5
-        np.testing.assert_array_almost_equal(sim.cell_param[i].get_var("v"), vecteur_nul)
+        assert pytest.approx(sim.cell_param[i].T) == 200
+        assert pytest.approx(sim.cell_param[i].p) == 1e5
+        assert sim.cell_param[i].vx == 0
+        assert sim.cell_param[i].vy == 0
 
     # On remet les variables à leur valeur initiale
     sim.set_var("T", 200,0 )
     sim.set_var("p", 1e5,[0.1,0.1])
-    sim.set_var("v", np.array([0, 0]), 0.1, 0.1)
+    sim.set_var('vx',0,0.1,0.1)
+    sim.set_var('vy',0,0.1,0.1)
     for i in range(0, 3):   
-        assert pytest.approx(sim.cell_param[i].get_var("T")) == 200
-        assert pytest.approx(sim.cell_param[i].get_var("p")) == 1e5
-        np.testing.assert_array_almost_equal(sim.cell_param[i].get_var("v"), vecteur_nul)
+        assert pytest.approx(sim.cell_param[i].T) == 200
+        assert pytest.approx(sim.cell_param[i].p) == 1e5
+        assert sim.cell_param[i].vx == 0
+        assert sim.cell_param[i].vy == 0
 
 def test_get_face_param():
     """Test de la fonction get_face_param"""
@@ -266,8 +240,6 @@ def test_compute_gradient():
     np.testing.assert_array_almost_equal(gradVx[1] , expected)
 
 
-
-
 def test_tensors():
     sim = Etat(mesh=mesh)
     sim.set_var("vx", 3, 0)
@@ -276,12 +248,13 @@ def test_tensors():
     sim.set_var("vx", 1, 3)
     sim.compute_gradient()
     for i in range(1,sim.mesh.size):
-        assert (sim.cell_param[i].get_var('gradVx')!=0).any() ,f"Gradient nul en cellule {i}\n"
+        grad = getattr(sim.cell_param[i], 'gradvx')
+        assert (grad!=0).any() ,f"Gradient nul en cellule {i}\n"
     sim.compute_tensors()
 
-    s1 = sim.cell_param[1].get_var('S')
+    s1 = getattr(sim.cell_param[1], 'S')
     print(f'S en cellule 1 :\n{s1}\n ')
-    W1 = sim.cell_param[1].get_var('Omega')
+    W1 = getattr(sim.cell_param[1], 'Omega')
     print(f'Omega en cellule 1 :\n{W1}\n ')
     assert (s1!=0).any()
     #  tester avec des vrais valeurs
@@ -315,12 +288,12 @@ def test_update_all_param():
     for i in range( sim.mesh.size):
         cell = sim.cell_param[i]
         print(f"{i}   {cell.vx:.2f}, {cell.vy:.2f}, {cell.k:.2f}, {cell.w:.2f} "
-              f"  [{' '.join(f'{val:.2f}' for val in cell.get_var('gradVx'))}] "
-              f"  [{' '.join(f'{val:.2f}' for val in cell.get_var('gradVy'))}] "
-              f"  [{' '.join(f'{val:.2f}' for val in cell.get_var('grad_k'))}] "
-              f"  [{' '.join(f'{val:.2f}' for val in cell.get_var('grad_w'))}]")
+              f"  [{' '.join(f'{val:.2f}' for val in getattr(cell,'gradvx'))}] "
+              f"  [{' '.join(f'{val:.2f}' for val in getattr(cell,'gradvy'))}] "
+              f"  [{' '.join(f'{val:.2f}' for val in getattr(cell,'gradk'))}] "
+              f"  [{' '.join(f'{val:.2f}' for val in getattr(cell,'gradw'))}]")
 
-    tau1 = sim.cell_param[1].get_var('tau')
+    tau1 = getattr(sim.cell_param[1], 'tau')
     assert tau1[0][0] == pytest.approx(-0.162, rel=1e-2)
     assert tau1[0][1] == pytest.approx(0, rel=1e-2)
     assert tau1[1][0] == pytest.approx(0, rel=1e-2)
