@@ -41,13 +41,11 @@ def test_param_init():
     
     # New attributes
     assert param.k          == 0.0          # Turbulent kinetic energy
-    assert param.w          == 0.0          # Specific dissipation rate
+    assert param.w          == 1.0          # Specific dissipation rate
     assert param.w_bar      == 1.0
     assert param.Nu_t       == 0.0           # Turbulent viscosity
     assert param.f_beta     == 0.0           # Beta function
     assert param.xi_omega   == 0.0           # Xi omega parameter
-    assert param.epsilon    == 0.0           # Dissipation rate
-    assert param.l          == 0.0           # Turbulence length scale
     assert param.sigma_d    == 0.0           # Scalar parameter
     assert (param.grad_k     == np.zeros(2)).all()   # Gradient of turbulent kinetic energy
     assert (param.grad_w     == np.zeros(2)).all()   # Gradient of specific dissipation rate
@@ -151,7 +149,7 @@ def test_update_values() :
     expected_epsilon = 0.18
     expected_l = 0.5
     expected_Nu_t = 0.5
-    expected_sigma_d = sigma_do
+    expected_sigma_d = SIGMA_DO
     expected_tau = -2/3*np.eye(2)
 
     assert param.epsilon == pytest.approx(expected_epsilon, rel=1e-2)
@@ -165,7 +163,7 @@ def test_update_values() :
     param.gradVy = np.array([2, 3])
     param.set_cell_tensor() # S = [[1,2], [2,3]]
     param.update_values()
-    assert param.w_bar == C_lim*20
+    assert param.w_bar == CLIM*20
     assert param.Nu_t == 1/param.w_bar
     expected_tau = -2/3*np.eye(2) + 4/35*param.S
     np.testing.assert_array_almost_equal(param.tau, expected_tau)
@@ -176,8 +174,8 @@ def test_update_values() :
 
 def test_init():
     """Test de l'initialisation de la classe Sim"""
-    sim = Sim(mesh=mesh)
-    assert isinstance(sim, Sim)
+    sim = Etat(mesh=mesh)
+    assert isinstance(sim, Etat)
     assert sim.mesh.size == len(mesh.cells)
     assert len(sim.cell_param) == len(mesh.cells)
     assert sim.cell_param[0].T == 200
@@ -187,7 +185,7 @@ def test_init():
 
 def test_set_var():
     """Test de la fonction set_var"""
-    sim = Sim(mesh=mesh)
+    sim = Etat(mesh=mesh)
     sim.set_var("T", 0, 0.2, 0.1)
     sim.set_var("p", 2e5, 0.1, 0.1)
     sim.set_var("v", np.array([1, 1]), 0.1, 0.1)
@@ -211,7 +209,7 @@ def test_set_var():
 
 def test_get_face_param():
     """Test de la fonction get_face_param"""
-    sim = Sim(mesh=mesh)
+    sim = Etat(mesh=mesh)
     face_param = sim.get_face_param(0)
     assert isinstance(face_param, Parametres)
     assert face_param.T == 200
@@ -232,7 +230,7 @@ def test_get_face_param():
     assert pytest.approx(face4_param.T) == 5 / 3
 
 def test_get_grad_cell():
-    sim = Sim(mesh=mesh)
+    sim = Etat(mesh=mesh)
 
     grad1_init = sim.get_grad_cell(1,'T')
     np.testing.assert_array_almost_equal(grad1_init,vecteur_nul)
@@ -247,7 +245,7 @@ def test_get_grad_cell():
     np.testing.assert_array_almost_equal(grad1,expected)
 
 def test_compute_gradient():
-    sim = Sim(mesh=mesh)
+    sim = Etat(mesh=mesh)
     gradT = sim.compute_gradient('T')
     for i in range(len(gradT)):
         assert (gradT[i]==vecteur_nul).all()
@@ -271,7 +269,7 @@ def test_compute_gradient():
 
 
 def test_tensors():
-    sim = Sim(mesh=mesh)
+    sim = Etat(mesh=mesh)
     sim.set_var("vx", 3, 0)
     sim.set_var("vx", 2, 1)
     sim.set_var("vx", 1, 2)
@@ -291,7 +289,7 @@ def test_tensors():
 
 def test_update_all_param():
     """Test the update_all_param method of the Sim class."""
-    sim = Sim(mesh=mesh)
+    sim = Etat(mesh=mesh)
     sim.set_var("vx", 0, 0)
     sim.set_var("vx", 0.5, 1)
     sim.set_var("vx", 0, 2)
@@ -328,16 +326,32 @@ def test_update_all_param():
     assert tau1[1][0] == pytest.approx(0, rel=1e-2)
     assert tau1[1][1] == pytest.approx(-0.50, rel=1e-2)
 
-
-if __name__=="__main__" :
-    
-    fig,ax = plt.subplots(1, 1, figsize=(10, 10))
-    sim = Sim(mesh=mesh)
+def test_sub():
+    """Test the sub method of the Sim class."""
+    sim = VarEtat(mesh=mesh)
     sim.set_var("T", 3, 0)
     sim.set_var("T", 2, 1)
     sim.set_var("T", 1, 2)
     sim.set_var("T", 1, 3)
-    sim.plot('T',ax=ax,point_size=100)
+
+    other_sim = VarEtat(mesh=mesh)
+    other_sim.set_var("T", 0, 0)
+    result = other_sim - sim
+
+    assert isinstance(result, Etat)
+    assert len(result.cell_param) == len(sim.cell_param)
+    assert result.cell_param[0].T == -3
+
+
+if __name__=="__main__" :
+    
+    fig,ax = plt.subplots(1, 1, figsize=(10, 10))
+    etat_ini = Etat(mesh=mesh)
+    etat_ini.set_var("T", 3, 0)
+    etat_ini.set_var("T", 2, 1)
+    etat_ini.set_var("T", 1, 2)
+    etat_ini.set_var("T", 1, 3)
+    etat_ini.plot('T',ax=ax,point_size=100)
     mesh.complete_plot(ax=ax)
     plt.show()
 

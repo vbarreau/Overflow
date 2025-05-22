@@ -58,7 +58,14 @@ class Mesh():
         self.set_mesh_volume()
         for face in self.faces:
             face.set_owner(self.nodes, self.cells)
+
+        self.set_boundary()
         self.size = len(self.cells)
+        step = 0
+        for face in self.faces:
+            step += np.linalg.norm(face.surface)
+        self.mean_step = step/len(self.faces)
+
 
     def read_mesh(self, filename:str,faces_per_cell = 4)->None:
         lines = open(filename, 'r').readlines()
@@ -206,6 +213,8 @@ class Mesh():
             self.centroid = np.mean(nodes[self.nodes_index], axis=0)
             self.sort_nodes(nodes)
             self.volume = self.get_volume(nodes)
+            self.is_boundary = False
+
             
         def __repr__(self):
             return f"Cell {self.indice_global} : \nfaces : {self.faces}\nNoeuds : {self.nodes_index}\nVoisins : {self.voisins}\n"
@@ -247,6 +256,17 @@ class Mesh():
             else:
                 return False
         
+    def set_boundary(self)->None:
+        """Définition des cellules frontières"""
+        for cell in self.cells:
+            # Si l'une des faces n'a qu'une cellule contiguë, la cellule est une frontière
+            for face_index in cell.faces:
+                face = self.faces[face_index]
+
+                if len(np.where(face.cells >=0)[0]) == 1:
+                    cell.is_boundary = True
+                    break
+
     def span(self):
         """Calcul de l'étendue du maillage"""
         x_min = np.min(self.nodes[:,0])

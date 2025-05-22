@@ -117,4 +117,13 @@ def test_surface():
     assert Sf1[1] == -1
     assert f1.owner == 1
 
+def test_set_boundary():
+    mesh.set_boundary()
+    assert mesh.cells[0].is_boundary == 1
+    assert mesh.cells[1].is_boundary == 0
+    assert mesh.cells[2].is_boundary == 1
+    assert mesh.cells[3].is_boundary == 1
 
+
+def test_mean_step():
+    assert mesh.mean_step == pytest.approx((10+np.sqrt(2))/11)

@@ -5,6 +5,12 @@ from matplotlib.animation import FuncAnimation
 from tqdm import tqdm
 
 def step(q, F, dt:float, t:float, ordre:int):
+    """ q       : valeur initiale Q[ti]
+        F       : fonction de Q et t telle que dQ/dt = F(Q,t)
+        dt      : pas de temps désiré
+        t       : temps actuel
+        ordre   : 1,2,3,4 ou "trapeze"
+        """
     if ordre == 1:
         return q + dt * F(q, t)
     elif ordre == 2:
