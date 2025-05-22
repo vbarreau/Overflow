@@ -525,6 +525,8 @@ class VarEtat(Etat):
         if isinstance(other, Etat):
             new_sim = Etat(mesh = self.mesh)
             for var in self.cell_param[0].__dict__.keys():
+                if var == "condition":
+                    continue
                 for i in range(len(self.mesh.cells)):
                     setattr(new_sim.cell_param[i], var, getattr(self.cell_param[i], var) - getattr(other.cell_param[i], var))
             return new_sim
