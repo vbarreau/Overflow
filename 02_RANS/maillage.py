@@ -1,6 +1,8 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
 from tqdm import tqdm
+import time
+
 
 def surface_triangle(node1, node2, node3):
     """Calcul de la surface d'un triangle par le produit vectoriel"""

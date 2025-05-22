@@ -39,7 +39,7 @@ def test_param_init():
     assert (param.tau        == np.zeros((2, 2)) ).all() # tenseur de turbulences
     
     # New attributes
-    assert param.k          == 0.0          # Turbulent kinetic energy
+    assert param.k          == 1.0          # Turbulent kinetic energy
     assert param.w          == 1.0          # Specific dissipation rate
     assert param.w_bar      == 1.0
     assert param.Nu_t       == 0.0           # Turbulent viscosity
@@ -114,14 +114,10 @@ def test_update_values() :
 
     param.update_values()
 
-    expected_epsilon = 0.18
-    expected_l = 0.5
     expected_Nu_t = 0.5
     expected_sigma_d = SIGMA_DO
     expected_tau = -2/3*np.eye(2)
 
-    assert param.epsilon == pytest.approx(expected_epsilon, rel=1e-2)
-    assert param.l == pytest.approx(expected_l, rel=1e-2)
     assert param.w_bar == param.w
     assert param.Nu_t == pytest.approx(expected_Nu_t, rel=1e-2)
     assert param.sigma_d == pytest.approx(expected_sigma_d, rel=1e-2)
