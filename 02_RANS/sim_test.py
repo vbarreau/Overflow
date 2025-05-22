@@ -31,10 +31,9 @@ def test_param_init():
     assert param.vx == 0
     assert param.vy == 0
     assert (param.gradT == np.ones(2)).all()
-    assert (param.gradP == np.zeros(2)).all()
+    assert (param.gradp == np.zeros(2)).all()
     assert (param.gradvx == np.zeros(2)).all()
     assert (param.gradvy == np.zeros(2)).all()
-    assert (param.grad_rho   == np.zeros(2)).all()
     assert (param.S          == np.zeros((2, 2)) ).all() # Tenseur des deformations
     assert (param.Omega      == np.zeros((2, 2)) ).all() # Tenseur de vorticité
     assert (param.tau        == np.zeros((2, 2)) ).all() # tenseur de turbulences
@@ -315,6 +314,11 @@ def test_sub():
     assert len(result.cell_param) == len(sim.cell_param)
     assert result.cell_param[0].T == -3
 
+def test_CL() :
+    sim = Sim(mesh=mesh)
+    sim.set_CL("vx",10,"in")
+    sim.set_CL("vy",0,"in")
+    sim.set_CL("p",1e5,"out")
 
 if __name__=="__main__" :
     

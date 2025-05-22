@@ -28,14 +28,14 @@ class Parametres:
         self.vy         = vy
         self.B          = self.p + 0.5*RHO*(self.vx**2 + self.vy**2)  # Bernoulli constant
         self.gradT      = np.ones(2)
-        self.gradP      = np.zeros(2)
+        self.gradp      = np.zeros(2)
         self.gradvx     = np.zeros(2)
         self.gradvy     = np.zeros(2)
         self.S          = np.zeros((2, 2))  # Tenseur des deformations
         self.Omega      = np.zeros((2, 2))  # Tenseur de vorticité
         self.tau        = np.zeros((2, 2))  # tenseur de turbulences
         
-        self.k          = 0.0          # Turbulent kinetic energy
+        self.k          = 1.0          # Turbulent kinetic energy
         self.w          = 1.0          # Specific dissipation rate
         self.w_bar      = 1.0
         self.Nu_t       = 0.0           # Turbulent viscosity
@@ -89,12 +89,12 @@ class Parametres:
         self.T = self.p / (287.05 * RHO)
         k = self.k
         w = self.w
-        self.epsilon = BETA_STAR*w*k
-        self.l = np.sqrt(k)/w 
+        # self.epsilon = BETA_STAR*w*k
+        # self.l = np.sqrt(k)/w 
         check = 0
-        grad_k = self.gradk
-        grad_w = self.gradw
-        check  = np.dot(grad_k,grad_w).sum()
+        gradk = self.gradk
+        gradw = self.gradw
+        check  = np.dot(gradk,gradw).sum()
         if check <= 0 :
             self.sigma_d = 0
         else :
@@ -198,8 +198,9 @@ class Etat():
             grad[:,0] /= self.mesh.cell_volume
             grad[:,1] /= self.mesh.cell_volume
             var_grad = "grad"+var
-            for i in range(len(grad)):
-                setattr(self.cell_param[i],var_grad,grad[i])
+            if var_grad in self.cell_param[0].__dict__.keys():    
+                for i in range(len(grad)):
+                    setattr(self.cell_param[i],var_grad,grad[i])
             return grad
         elif len(args)==0 :
             all_var = ['vx','vy','T','p','k','w']
@@ -249,24 +250,27 @@ class Etat():
             DX = (xmax-xmin)/args[0].shape[0]
             DY = (ymax-ymin)/args[0].shape[1]
             for cell in self.mesh.cells:
+                limits = self.cell_param[cell.indice_global].condition
+                if  var in [cl.var for cl in limits] :
+                    # Si la cellule a une condition limite, on ne change pas la valeur
+                    continue
                 x = cell.centroid[0]
                 y = cell.centroid[1]
                 nx = int((x-xmin)/DX)
                 ny = int((y-ymin)/DY)
                 if nx < 0 or nx >= args[0].shape[0] or ny < 0 or ny >= args[0].shape[1]:
                     raise ValueError(f"Cellule {cell.indice_global} en dehors de la matrice")
-                self.cell_param[cell.indice_global].set_var(var,args[0][nx,ny])
+                setattr(self.cell_param[cell.indice_global], var, args[0][nx,ny])
         elif len(args) == 1 and callable(args[0]):
             for cell in self.mesh.cells:
+                limits = self.cell_param[cell.indice_global].condition
+                if  var in [cl.var for cl in limits] :
+                    # Si la cellule a une condition limite, on ne change pas la valeur
+                    continue
                 x = cell.centroid[0]
                 y = cell.centroid[1]
-                try :
-                    self.cell_param[cell.indice_global].set_var(var,args[0](x,y))
-                except ValueError :
-                    if var != "vy" and var != "Vx" :
-                        self.cell_param[cell.indice_global].set_var(var,args[0](x,y)[0])
-                    else :
-                        self.cell_param[cell.indice_global].set_var(var,args[0](x,y)[1])
+                setattr(self.cell_param[cell.indice_global], var, args[0](x,y))
+                
         for cell in self.cell_param:
             cell.update_values()
             cell.set_cell_tensor()
@@ -348,6 +352,8 @@ class Etat():
         if isinstance(other, float) or isinstance(other, int):
             new_sim = Etat(mesh = self.mesh)
             for var in self.cell_param[0].__dict__.keys():
+                if var == "condition":
+                    continue
                 for i in range(len(self.mesh.cells)):
                     setattr(new_sim.cell_param[i], var, getattr(self.cell_param[i], var) * other)
             return new_sim
@@ -390,6 +396,20 @@ class Etat():
                 setattr(new_sim.cell_param[i], var, getattr(self.cell_param[i], var))
         return new_sim
 
+    def sum(self,var:str)->float:
+        """Renvoie la somme d'une variable dans l'état"""
+        s = 0
+        for cell in self.cell_param:
+            s += getattr(cell, var)
+        return s
+    
+    def mean(self,var:str)->float:
+        """Renvoie la moyenne non pondérée d'une variable dans l'état"""
+        s = 0
+        for cell in self.cell_param:
+            s += getattr(cell, var)
+        return s/len(self.cell_param)
+
 class VarEtat(Etat):
     """Classe contenant la variation temporelle d'un etat à l'autre"""
     def __init__(self, *args, **kwargs)->None:
@@ -416,46 +436,36 @@ class VarEtat(Etat):
         else:
             raise ValueError(f"Type {type(other)} non reconnu")
         
-    
-    def sum(self,var:str)->float:
-        """Renvoie la somme d'une variable dans la simulation"""
-        s = 0
-        for cell in self.cell_param:
-            s += getattr(cell, var)
-        return s
-    
-    def mean(self,var:str)->float:
-        """Renvoie la moyenne d'une variable dans la simulation"""
-        s = 0
-        for cell in self.cell_param:
-            s += getattr(cell, var)
-        return s/len(self.cell_param)
           
 
-# def NS(cp : Parametres, t:float,prod_k, prod_w)->Parametres:
-#     """Renvoie les variations temporelles de la cellule"""
-#     if len(cp.condition) > 0 :
-#         return 0,0,0,0
-#     dVx = -cp.vx*cp.gradVx[0]- cp.vy*cp.gradVx[1] *(-cp.gradP + 0 )/RHO  # Manque les gradients de sigma et tau
-#     dVy = -cp.vx*cp.gradVy[0]- cp.vy*cp.gradVy[1] *(-cp.gradP + 0 )/RHO  # Manque les gradients de sigma et tau
-#     A =0
-#     for i in range(2):
-#         for j in range(2):
-#             if i == 0 :
-#                 gv = cp.gradVx
-#             else :
-#                 gv = cp.gradVy
-#             A += cp.tau[i,j]*gv[j] 
-#     dk = -cp.vx*cp.grad_k[0]- cp.vy*cp.grad_k[1] + A - BETA_STAR*cp.k*cp.w + prod_k.sum() 
-#     dw = -cp.vx*cp.grad_w[0]- cp.vy*cp.grad_w[1] + ALPHA * cp.w/cp.k * A - BETA*cp.w**2 + cp.sigma_d*(cp.grad_k*cp.grad_w).sum()  + prod_w.sum()
+def NS(cp : Parametres, t:float,prod_k, prod_w)->Parametres:
+    """Renvoie les variations temporelles de la cellule"""
+    if len(cp.condition) > 0 :
+        return 0,0,0,0
+    dVx = -cp.vx*cp.gradvx[0]- cp.vy*cp.gradvx[1] *(-cp.gradp[0] + 0 )/RHO  # Manque les gradients de sigma et tau
+    dVy = -cp.vx*cp.gradvy[0]- cp.vy*cp.gradvy[1] *(-cp.gradp[1] + 0 )/RHO  # Manque les gradients de sigma et tau
+    A =0
+    for i in range(2):
+        for j in range(2):
+            if i == 0 :
+                gv = cp.gradvx
+            else :
+                gv = cp.gradvy
+            A += cp.tau[i,j]*gv[j] 
+    dk = -cp.vx*cp.gradk[0]- cp.vy*cp.gradk[1] + A - BETA_STAR*cp.k*cp.w + prod_k.sum() 
+    dw = -cp.vx*cp.gradw[0]- cp.vy*cp.gradw[1] + ALPHA * cp.w/cp.k * A - BETA*cp.w**2 + cp.sigma_d*(cp.gradk*cp.gradw).sum()  + prod_w.sum()
     
-#     return dVx, dVy, dk, dw
+    return dVx, dVy, dk, dw
 
 
 class Sim():
-    def __init__(self, filename:str)->None:
-        self.etat = Etat(filename=filename)
-        self.etat.set_CI("T",radial_CI)
+    def __init__(self, **kwargs)->None:
+        if len(kwargs) == 1 and 'filename' in kwargs and isinstance(kwargs['filename'], str):
+            filename = kwargs['filename']
+            self.etat = Etat(filename=filename)
+        elif len(kwargs) == 1 and 'mesh' in kwargs and isinstance(kwargs['mesh'], Mesh):
+            self.etat = Etat(mesh=kwargs['mesh'])
+
         self.etat.update_all_param()
         self.etat.compute_gradient()
         self.etat.compute_tensors()
@@ -480,66 +490,69 @@ class Sim():
                 self.etat.cell_param[i].add_CL(condition)
                 setattr(self.etat.cell_param[i], var, value)
     
-    # def NS_sim(self,Q:Etat,t:float)->Etat:
-    #     """Résolution des equations de Navier-Stokes sur l'etat Q
-    #     Renvoie les vecteurs de variations temporelles de Vx, Vy, k, w et leurs gradients
-    #     Les autres facteurs de variation sont unitaires"""
-    #     dQ_dt = VarEtat(mesh=self.etat.mesh)
-    #     prod_k = Q.compute_gradient("gamma_k")
-    #     prod_w = Q.compute_gradient("gamma_w")
-    #     residu = np.zeros(4)
+    def NS_sim(self,Q:Etat,t:float)->Etat:
+        """Résolution des equations de Navier-Stokes sur l'etat Q
+        Renvoie les vecteurs de variations temporelles de Vx, Vy, k, w et leurs gradients
+        Les autres facteurs de variation sont unitaires"""
+        dQ_dt = VarEtat(mesh=self.etat.mesh)
+        prod_k = Q.compute_gradient("gamma_k")
+        prod_w = Q.compute_gradient("gamma_w")
+        residu = np.zeros(4)
 
-    #     for i in tqdm(range(len(self.etat.mesh.cells), desc="Calcul des variations")):
-    #         if self.etat.mesh.cells[i].is_boundary :
-    #             continue # 
-    #         c = self.etat.cell_param[i]
+        for i in tqdm(range(len(self.etat.mesh.cells)), desc="Calcul des variations"):
+            
+            c = self.etat.cell_param[i]
+            limits = c.condition
+            var_liimits = [cl.var for cl in limits]
 
-    #         dVx, dVy, dk, dw = NS(c,t,prod_k[i],prod_w[i])
+            dVx, dVy, dk, dw = NS(c,t,prod_k[i],prod_w[i])
 
-    #         dQ_dt.cell_param[i].vx = dVx
-    #         dQ_dt.cell_param[i].vy = dVy
-    #         dQ_dt.cell_param[i].k = dk
-    #         dQ_dt.cell_param[i].w = dw 
+            if 'vx' not in var_liimits :
+                dQ_dt.cell_param[i].vx = dVx
+            if 'vy' not in var_liimits :
+                dQ_dt.cell_param[i].vy = dVy    
+            dQ_dt.cell_param[i].k = dk
+            dQ_dt.cell_param[i].w = dw 
 
-    #     residu[0] = Q.sum("vx")/Q.mean("vx")
-    #     residu[1] = Q.sum("vy")/Q.mean("vy")
-    #     residu[2] = Q.sum("k")/Q.mean("k")
-    #     residu[3] = Q.sum("w")/Q.mean("w")
+        residu[0] = Q.sum("vx")/(Q.mean("vx")+1)
+        residu[1] = Q.sum("vy")/(Q.mean("vy")+1)
+        residu[2] = Q.sum("k") /(Q.mean("k")+1)
+        residu[3] = Q.sum("w") /(Q.mean("w")+1)
 
-    #     dQ_dt.compute_gradient("vx") # Les dérivées commutent donc je calcul d²/dx.dt plutot que d²/dt.dx
-    #     dQ_dt.compute_gradient("vy")
-    #     dQ_dt.compute_gradient("k")
-    #     dQ_dt.compute_gradient("w")
+        dQ_dt.compute_gradient("vx") # Les dérivées commutent donc je calcul d²/dx.dt plutot que d²/dt.dx
+        dQ_dt.compute_gradient("vy")
+        dQ_dt.compute_gradient("k")
+        dQ_dt.compute_gradient("w")
 
-    #     return dQ_dt, residu
+        return dQ_dt, residu
 
 
-    # def step(self, F:callable, dt:float, t:float, ordre:int)-> Etat:
-    #     """ Effectue une étape de la méthode de Runge-Kutta dans la simulation
-    #         F       : fonction de Q et t qui renvoie le VarEtat dQ/dt = F(Q,t)[0]
-    #         dt      : pas de temps désiré
-    #         t       : temps actuel
-    #         ordre   : 1,2,3 ou 4 
-    #         """
-    #     if ordre == 1:
-    #         k1, residu =  F(self.etat, t)
-    #         self.etat =  self.etat + dt * k1
-    #     elif ordre == 2:
-    #         k1 = F(self.etat, t)[0]
-    #         k2, residu = F(self.etat + dt/2 * k1, t + dt/2)[0]
-    #         self.etat = self.etat + dt * k2
-    #     elif ordre == 3:
-    #         k1 = F(self.etat, t)[0]
-    #         k2 = F(self.etat + dt/2 * k1, t + dt/2)[0]
-    #         k3, residu = F(self.etat - dt * k1 + 2 * dt * k2, t + dt)[0]
-    #         self.etat = self.etat + dt/6 * (k1 + 4 * k2 + k3)
-    #     elif ordre == 4:
-    #         k1 = F(self.etat, t)[0]
-    #         k2 = F(self.etat + dt/2 * k1, t + dt/2)[0]
-    #         k3 = F(self.etat + dt/2 * k2, t + dt/2)[0]
-    #         k4, residu = F(self.etat + dt * k3, t + dt)[0]
-    #         self.etat = self.etat + dt/6 * (k1 + 2 * k2 + 2 * k3 + k4)
-    #     return residu
+    def step(self, F:callable, dt:float, t:float, ordre:int)-> Etat:
+        """ Effectue une étape de la méthode de Runge-Kutta dans la simulation
+            F       : fonction de Q et t qui renvoie le VarEtat dQ/dt = F(Q,t)[0]
+            dt      : pas de temps désiré
+            t       : temps actuel
+            ordre   : 1,2,3 ou 4 
+            """
+        if ordre == 1:
+            k1, residu =  F(self.etat, t)
+            self.etat =  self.etat + k1*dt
+        elif ordre == 2:
+            k1 = F(self.etat, t)[0]
+            k2, residu = F(self.etat + dt/2 * k1, t + dt/2)[0]
+            self.etat = self.etat + dt * k2
+        elif ordre == 3:
+            k1 = F(self.etat, t)[0]
+            k2 = F(self.etat + dt/2 * k1, t + dt/2)[0]
+            k3, residu = F(self.etat - dt * k1 + 2 * dt * k2, t + dt)[0]
+            self.etat = self.etat + dt/6 * (k1 + 4 * k2 + k3)
+        elif ordre == 4:
+            k1 = F(self.etat, t)[0]
+            k2 = F(self.etat + dt/2 * k1, t + dt/2)[0]
+            k3 = F(self.etat + dt/2 * k2, t + dt/2)[0]
+            k4, residu = F(self.etat + dt * k3, t + dt)[0]
+            self.etat = self.etat + dt/6 * (k1 + 2 * k2 + 2 * k3 + k4)
+        return residu
         
     # def integrator(self,F:callable,dt:float,ti=0,tf=1,ordre=1):
     #     """ q       : Etat initiale Q[ti]
@@ -562,11 +575,21 @@ if __name__ == "__main__":
     sim.set_CL("vx",10,"in")
     sim.set_CL("vy",0,"in")
     sim.set_CL("p",1e5,"out")
+    sim.etat.set_CI("vx",CI_uniforme)
+    sim.etat.set_CI("vy",CI_uniforme)
+    sim.etat.compute_gradient()
     # for i in range(sim.etat.mesh.size):
     #     if sim.etat.cell_param[i].condition != None :
     #         cell_p = sim.etat.cell_param[i]
     #         cell = sim.etat.mesh.cells[i]
     #         var = cell_p.condition.var
     #         print(f'Cellule {i}, x = {cell.centroid[0]} : {var} = {getattr(sim.etat.cell_param[i],var)}')
-    sim.etat.plot_v()
+    
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    sim.etat.plot('vx',ax=ax[0])
+    for i in range(6):
+        sim.step(sim.NS_sim, 0.5, 0, 1)
+
+    sim.etat.plot('vx',ax=ax[1])
+
     plt.show()

@@ -20,3 +20,7 @@ def CI_cylindre(x,y,A=1,a=2) :
     Vx = V[0]
     Vy = V[1]
     return Vx, Vy
+
+def CI_uniforme(x,y,A=1) :
+    """Condition initiale uniforme"""
+    return A
