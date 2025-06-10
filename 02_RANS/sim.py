@@ -7,22 +7,12 @@ from etat import *
 
 def NS(cp : Parametres, t:float,prod_k, prod_w)->Parametres:
     """Renvoie les variations temporelles de la cellule"""
-    if len(cp.condition) > 0 :
-        return 0,0,0,0
-    dVx = -cp.vx*cp.gradvx[0]- cp.vy*cp.gradvx[1] *(-cp.gradp[0] + 0 )/RHO  # Manque les gradients de sigma et tau
-    dVy = -cp.vx*cp.gradvy[0]- cp.vy*cp.gradvy[1] *(-cp.gradp[1] + 0 )/RHO  # Manque les gradients de sigma et tau
-    A =0
-    for i in range(2):
-        for j in range(2):
-            if i == 0 :
-                gv = cp.gradvx
-            else :
-                gv = cp.gradvy
-            A += cp.tau[i,j]*gv[j] 
-    dk = -cp.vx*cp.gradk[0]- cp.vy*cp.gradk[1] + A - BETA_STAR*cp.k*cp.w + prod_k.sum() 
-    dw = -cp.vx*cp.gradw[0]- cp.vy*cp.gradw[1] + ALPHA * cp.w/cp.k * A - BETA*cp.w**2 + cp.sigma_d*(cp.gradk*cp.gradw).sum()  + prod_w.sum()
+
+    dVx, dVy = cp.solve_momentum()
+    dk, dw = cp.solve_turbulence(prod_k, prod_w)
+    dT = cp.solve_energy()
     
-    return dVx, dVy, dk, dw
+    return dVx, dVy, dk, dw, dT
 
 
 class Sim():
@@ -72,7 +62,7 @@ class Sim():
             limits = c.condition
             var_liimits = [cl.var for cl in limits]
 
-            dVx, dVy, dk, dw = NS(c,t,prod_k[i],prod_w[i])
+            dVx, dVy, dk, dw, dT = NS(c,t,prod_k[i],prod_w[i])
 
             if 'vx' not in var_liimits :
                 dQ_dt.cell_param[i].vx = dVx
@@ -80,6 +70,8 @@ class Sim():
                 dQ_dt.cell_param[i].vy = dVy    
             dQ_dt.cell_param[i].k = dk
             dQ_dt.cell_param[i].w = dw 
+            if 'T' not in var_liimits :
+                dQ_dt.cell_param[i].T = dT
 
         residu[0] = Q.sum("vx")/(Q.mean("vx")+1)
         residu[1] = Q.sum("vy")/(Q.mean("vy")+1)
@@ -92,6 +84,9 @@ class Sim():
         dQ_dt.compute_gradient("w")
 
         return dQ_dt, residu
+    
+    def pressure_correction(self, Q:Etat, t:float)->Etat:
+        
 
 
     def step(self, F:callable, dt:float, t:float, ordre:int)-> Etat:
@@ -106,19 +101,19 @@ class Sim():
             self.etat =  self.etat + k1*dt
         elif ordre == 2:
             k1 = F(self.etat, t)[0]
-            k2, residu = F(self.etat + dt/2 * k1, t + dt/2)[0]
-            self.etat = self.etat + dt * k2
+            k2, residu = F(self.etat + k1 * dt/2 , t + dt/2)[0]
+            self.etat = self.etat + k2 * dt
         elif ordre == 3:
             k1 = F(self.etat, t)[0]
-            k2 = F(self.etat + dt/2 * k1, t + dt/2)[0]
-            k3, residu = F(self.etat - dt * k1 + 2 * dt * k2, t + dt)[0]
-            self.etat = self.etat + dt/6 * (k1 + 4 * k2 + k3)
+            k2 = F(self.etat + k1  * dt/2, t + dt/2)[0]
+            k3, residu = F(self.etat - k1 * dt + k2 * 2*dt, t + dt)[0]
+            self.etat = self.etat +  (k1 +  k2*4 + k3)*dt/6
         elif ordre == 4:
             k1 = F(self.etat, t)[0]
-            k2 = F(self.etat + dt/2 * k1, t + dt/2)[0]
-            k3 = F(self.etat + dt/2 * k2, t + dt/2)[0]
-            k4, residu = F(self.etat + dt * k3, t + dt)[0]
-            self.etat = self.etat + dt/6 * (k1 + 2 * k2 + 2 * k3 + k4)
+            k2 = F(self.etat + k1*dt/2 , t + dt/2)[0]
+            k3 = F(self.etat + k2*dt/2, t + dt/2)[0]
+            k4, residu = F(self.etat + k3*dt, t + dt)
+            self.etat = self.etat + (k1 + k2*2 + k3*2 + k4)*dt/6
         return residu
         
     # def integrator(self,F:callable,dt:float,ti=0,tf=1,ordre=1):
@@ -138,13 +133,15 @@ class Sim():
     #         residu = self.step(F,dt,t,ordre)
 
 if __name__ == "__main__":
-    sim = Sim(filename = "D:/OneDrive/Documents/11-Codes/overflow/02_RANS/circle_mesh.dat")
-    sim.set_CL("vx",10,"in")
-    sim.set_CL("vy",0,"in")
+    
+    from exemples import mesh_ligne
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    sim = Sim(mesh=mesh_ligne)
+    sim.set_CL("p",2e5,"in")
     sim.set_CL("p",1e5,"out")
-    sim.etat.set_CI("vx",CI_uniforme)
-    sim.etat.set_CI("vy",CI_uniforme)
-    sim.etat.compute_gradient()
+
+    sim.etat.update_all_param()
     # for i in range(sim.etat.mesh.size):
     #     if sim.etat.cell_param[i].condition != None :
     #         cell_p = sim.etat.cell_param[i]
@@ -152,12 +149,40 @@ if __name__ == "__main__":
     #         var = cell_p.condition.var
     #         print(f'Cellule {i}, x = {cell.centroid[0]} : {var} = {getattr(sim.etat.cell_param[i],var)}')
     
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    sim.etat.plot('vx',ax=ax[0])
-    for i in tqdm(range(6)):
+    print(f'Etat Initial : \nP : {sim.etat.cell_param[0].p:.2f} Pa, {sim.etat.cell_param[1].p} Pa, {sim.etat.cell_param[2].p} Pa \n')
+
+
+    fig, ax = plt.subplots(2, 2, figsize=(12, 6))
+
+    # Plot vx before
+    sc_vx0 = sim.etat.plot('vx', ax=ax[0,0], point_size=500, cbar=False)
+    # Plot p before
+    sc_p0 = sim.etat.plot('p', ax=ax[1,0], point_size=500,cbar=False)
+
+    for i in tqdm(range(100)):
         sim.step(sim.NS_sim, 0.5, 0, 1)
         sim.etat.update_all_param()
 
-    sim.etat.plot('vx',ax=ax[1])
+    # Plot vx after
+    sc_vx1 = sim.etat.plot('vx', ax=ax[0,1], point_size=500,cbar=False)
+    # Plot p after
+    sc_p1 = sim.etat.plot('p', ax=ax[1,1], point_size=500,cbar=False)
+
+    # Place colorbars outside the plot area
+
+    # vx colorbar (right of top row)
+    divider0 = make_axes_locatable(ax[0,1])
+    cax_vx = divider0.append_axes("right", size="5%", pad=0.15)
+    cbar_vx = fig.colorbar(sc_vx1, cax=cax_vx)
+    cbar_vx.set_label('vx (m/s)')
+
+    # p colorbar (right of bottom row)
+    divider1 = make_axes_locatable(ax[1,1])
+    cax_p = divider1.append_axes("right", size="5%", pad=0.15)
+    cbar_p = fig.colorbar(sc_p1, cax=cax_p)
+    cbar_p.set_label('p')
+
+    plt.tight_layout()
+    print(f'Etat final : \nP : {sim.etat.cell_param[0].p:.2f} Pa, {sim.etat.cell_param[1].p} Pa, {sim.etat.cell_param[2].p} Pa \n')
 
     plt.show()

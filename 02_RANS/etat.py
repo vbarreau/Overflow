@@ -13,18 +13,20 @@ CLIM       = 7 / 8
 
 RHO = 1000
 NU = 1e-3
-
+CV = 4186
+LAMBDA = 0.606
+MU = NU * RHO
 
 
 class Parametres:
     """Classe pour les parametres de la cellule"""
-    def __init__(self, T: float = 200, p: float = 1e5, vx: float = 0, vy: float = 0) -> None:
+    def __init__(self, T: float = 300, p: float = 1e5, vx: float = 0, vy: float = 0,k = 1, w = 1) -> None:
         self.T          = T
         self.p          = p
         self.vx         = vx
         self.vy         = vy
-        self.B          = self.p + 0.5*RHO*(self.vx**2 + self.vy**2)  # Bernoulli constant
         self.gradT      = np.ones(2)
+        self.gradgradtT = np.zeros(2) 
         self.gradp      = np.zeros(2)
         self.gradvx     = np.zeros(2)
         self.gradvy     = np.zeros(2)
@@ -32,8 +34,8 @@ class Parametres:
         self.Omega      = np.zeros((2, 2))  # Tenseur de vorticité
         self.tau        = np.zeros((2, 2))  # tenseur de turbulences
         
-        self.k          = 1.0          # Turbulent kinetic energy
-        self.w          = 1.0          # Specific dissipation rate
+        self.k          = k          # Turbulent kinetic energy
+        self.w          = w          # Specific dissipation rate
         self.w_bar      = 1.0
         self.Nu_t       = 0.0           # Turbulent viscosity
         self.f_beta     = 0.0           # Beta function
@@ -45,6 +47,7 @@ class Parametres:
         self.gradw     = np.zeros(2)   # Gradient of specific dissipation rate
         self.gamma_k     = (NU + SIGMA_STAR*self.k/self.w)*self.gradk
         self.gamma_w     = (NU + SIGMA * self.k/self.w)*self.gradw  
+        self.v_sink      = np.zeros((2,2,2))   # tenseur de puit de vitesse
 
         self.condition = [] 
 
@@ -55,6 +58,9 @@ class Parametres:
         else :
             return
 
+    def div_v(self) -> float:
+        """Calcul de la divergence de la vitesse"""
+        return self.gradvx[0] + self.gradvy[1]
     
     def w_bar_min(self) -> float:
         """Renvoie la valeur minimale de w_bar"""
@@ -82,8 +88,7 @@ class Parametres:
 
     def update_values(self)-> None: 
         # k,w et S doivent etre mis a jour avant   
-        self.p = self.B - 0.5*RHO*(self.vx**2 + self.vy**2)
-        self.T = self.p / (287.05 * RHO)
+        # self.p = self.T * (287.05 * RHO)
         k = self.k
         w = self.w
         # self.epsilon = BETA_STAR*w*k
@@ -113,6 +118,30 @@ class Parametres:
         self.condition.append(condition)
         return None
     
+    def solve_momentum(self) -> tuple:
+        """Renvoie les variations temporelles de la cellule"""
+        dVx = -self.vx*self.gradvx[0]- self.vy*self.gradvx[1] + (-self.gradp[0] + self.v_sink[0,0,0] + self.v_sink[1,0,1] )/RHO  
+        dVy = -self.vx*self.gradvy[0]- self.vy*self.gradvy[1] + (-self.gradp[1] + self.v_sink[0,1,0] + self.v_sink[1,1,1] )/RHO 
+        return dVx, dVy
+    
+    def solve_turbulence(self,prod_k,prod_w) -> tuple:
+        """Renvoie les variations temporelles de k et w"""
+        A =0 #  A = sum_{i,j}(tau[i,j] * dUi/dxj)
+        for i in range(2):
+            for j in range(2):
+                if i == 0 :
+                    gv = self.gradvx
+                else :
+                    gv = self.gradvy
+                A += self.tau[i,j]*gv[j] # l'indice i de gv n'est pas nécessaire car selectionné avec les if précédents
+        dk = -self.vx*self.gradk[0]- self.vy*self.gradk[1] + A - BETA_STAR*self.k*self.w + prod_k.sum() 
+        dw = -self.vx*self.gradw[0]- self.vy*self.gradw[1] + ALPHA * self.w/self.k * A - BETA*self.w**2 + self.sigma_d*(self.gradk*self.gradw).sum()  + prod_w.sum()
+        return dk, dw
+    
+    def solve_energy(self) -> float:
+        dT = (-self.p*self.div_v() + LAMBDA*self.gradgradtT.sum() + 2*MU*(self.S*self.S).sum()-2/3*MU*self.div_v()**2)/RHO
+        return dT
+        
 
 class CL():
     """Classe pour les conditions limites
@@ -136,6 +165,11 @@ class Etat():
         self.cell_param = [Parametres() for _ in range(len(self.mesh.cells))]
 
 # Face
+
+    def face_average(self,gn,go,owner,neighbour,var):
+
+        return gn*getattr(self.cell_param[neighbour],var) + go*getattr(self.cell_param[owner],var)
+
     def get_face_param(self,face_index:int)->Parametres: 
         """Calcul des parametres de la face"""
 
@@ -153,11 +187,13 @@ class Etat():
             Vn = cells[face.neighbour].volume
             gn = Vo/(Vo + Vn)
             go = 1-gn
-            T = gn*self.cell_param[index_neighbour].T + go*self.cell_param[index_owner].T
-            vx = gn*self.cell_param[index_neighbour].vx + go*self.cell_param[index_owner].vx
-            vy = gn*self.cell_param[index_neighbour].vy + go*self.cell_param[index_owner].vy
-            p = gn*self.cell_param[index_neighbour].p + go*self.cell_param[index_owner].p
-            return Parametres(T,p,vx,vy)
+            T  = self.face_average(gn,go,index_neighbour,index_owner,'T')
+            k  = self.face_average(gn,go,index_neighbour,index_owner,'k')
+            w  = self.face_average(gn,go,index_neighbour,index_owner,'w')
+            vx = self.face_average(gn,go,index_neighbour,index_owner,'vx')
+            vy = self.face_average(gn,go,index_neighbour,index_owner,'vy')
+            p  = self.face_average(gn,go,index_neighbour,index_owner,'p')
+            return Parametres(T,p,vx,vy,k,w)
 
 # Cell
     def get_grad_cell(self,cell_index, var)->np.array:
@@ -202,6 +238,29 @@ class Etat():
         elif len(args)==0 :
             all_var = ['vx','vy','T','p','k','w']
             return [self.compute_gradient(s) for s in all_var]
+        
+    def compute_sink(self):
+        """ Calcul du terme puit des equations de vitesse
+            d/dxj (Sij + tau_ij))"""
+        grad = np.zeros((len(self.mesh.cells),2,2,2))
+        for i,f in enumerate(self.mesh.faces):
+            #val est la somme sigma + tau
+            val = getattr(self.get_face_param(i),'tau') + getattr(self.get_face_param(i),'S')
+            flux_f = np.zeros((2,2,2))
+            flux_f[0] = val*f.surface[0]
+            flux_f[1] = val*f.surface[1]
+            if f.owner != -1 :
+                grad[f.owner] += flux_f
+            if f.neighbour != -1 :
+                grad[f.neighbour] -= flux_f
+        for i in range(len(grad)):
+            # On divise par le volume de la cellule
+            grad[i,0,0] /= self.mesh.cell_volume[i]
+            grad[i,0,1] /= self.mesh.cell_volume[i]
+            grad[i,1,0] /= self.mesh.cell_volume[i]
+            grad[i,1,1] /= self.mesh.cell_volume[i]
+        for i in range(len(grad)):
+            self.cell_param[i].v_sink = grad[i]
     
     def compute_tensors(self) : 
         for cell_index in range(self.mesh.size) :
@@ -211,9 +270,11 @@ class Etat():
     def update_all_param(self):
         self.compute_gradient()
         self.compute_tensors()
+        self.compute_sink()
 
         for cell in self.cell_param:
             cell.update_values()
+            cell.reset_CL()
             
     
     def set_var(self,var:str,value:np.array,*args)->None:
@@ -276,7 +337,7 @@ class Etat():
     
 
     # Plotting
-    def plot(self, var:str,ax = None,point_size=10)->None:
+    def plot(self, var:str,ax = None,point_size=10,cbar=True)->None:
         """Plot the mesh with the variable"""
         if ax is None:
             fig, ax = plt.subplots()
@@ -287,7 +348,8 @@ class Etat():
         values = [np.linalg.norm(getattr(self.cell_param[i], var)) for i in range(len(self.mesh.cells))]
         
         sc = ax.scatter(x, y, c=values, cmap='viridis', s=point_size)
-        plt.colorbar(sc, ax=ax, label=var)
+        if cbar :
+            plt.colorbar(sc, ax=ax, label=var)
 
     def plot_v(self,ax=None):
         """Plot the mesh with the velocity"""
@@ -368,6 +430,8 @@ class Etat():
         if isinstance(other, float) or isinstance(other, int):
             new_sim = Etat(mesh = self.mesh)
             for var in self.cell_param[0].__dict__.keys():
+                if var == "condition":
+                    continue
                 for i in range(len(self.mesh.cells)):
                     setattr(new_sim.cell_param[i], var, getattr(self.cell_param[i], var) / other)
             return new_sim

@@ -1,7 +1,7 @@
 import sys
 import numpy as np
 sys.path.append(r"D:/OneDrive/Documents/11-Codes/overflow/02_RANS")
-from sim import *
+from etat import *
 from maillage_test import mesh
 
 import pytest
@@ -26,7 +26,7 @@ def test_param_init():
     """Test de l'initialisation de la classe Parametres"""
     param = Parametres()
     assert isinstance(param, Parametres)
-    assert param.T == 200
+    assert param.T == 300
     assert param.p == 1e5
     assert param.vx == 0
     assert param.vy == 0
@@ -138,118 +138,118 @@ def test_update_values() :
 
 def test_init():
     """Test de l'initialisation de la classe Sim"""
-    sim = Etat(mesh=mesh)
-    assert isinstance(sim, Etat)
-    assert sim.mesh.size == len(mesh.cells)
-    assert len(sim.cell_param) == len(mesh.cells)
-    assert sim.cell_param[0].T == 200
-    assert sim.cell_param[0].p == 1e5
-    np.testing.assert_array_equal(sim.cell_param[0].vx, 0)
+    state = Etat(mesh=mesh)
+    assert isinstance(state, Etat)
+    assert state.mesh.size == len(mesh.cells)
+    assert len(state.cell_param) == len(mesh.cells)
+    assert state.cell_param[0].T == 300
+    assert state.cell_param[0].p == 1e5
+    np.testing.assert_array_equal(state.cell_param[0].vx, 0)
 
 
 def test_set_var():
     """Test de la fonction set_var"""
-    sim = Etat(mesh=mesh)
-    sim.set_var("T", 0, 0.2, 0.1)
-    sim.set_var("p", 2e5, 0.1, 0.1)
-    sim.set_var('vx',1,0.1,0.1)
-    sim.set_var('vy',1,0.1,0.1)
-    assert sim.cell_param[0].vx == 1
-    assert sim.cell_param[0].vy == 1    
-    assert sim.cell_param[0].p == pytest.approx(2e5)
-    assert sim.cell_param[0].T == pytest.approx(0)
+    state = Etat(mesh=mesh)
+    state.set_var("T", 0, 0.2, 0.1)
+    state.set_var("p", 2e5, 0.1, 0.1)
+    state.set_var('vx',1,0.1,0.1)
+    state.set_var('vy',1,0.1,0.1)
+    assert state.cell_param[0].vx == 1
+    assert state.cell_param[0].vy == 1    
+    assert state.cell_param[0].p == pytest.approx(2e5)
+    assert state.cell_param[0].T == pytest.approx(0)
 
     for i in range(1, 3):
-        assert pytest.approx(sim.cell_param[i].T) == 200
-        assert pytest.approx(sim.cell_param[i].p) == 1e5
-        assert sim.cell_param[i].vx == 0
-        assert sim.cell_param[i].vy == 0
+        assert pytest.approx(state.cell_param[i].T) == 300
+        assert pytest.approx(state.cell_param[i].p) == 1e5
+        assert state.cell_param[i].vx == 0
+        assert state.cell_param[i].vy == 0
 
     # On remet les variables à leur valeur initiale
-    sim.set_var("T", 200,0 )
-    sim.set_var("p", 1e5,[0.1,0.1])
-    sim.set_var('vx',0,0.1,0.1)
-    sim.set_var('vy',0,0.1,0.1)
+    state.set_var("T", 300,0 )
+    state.set_var("p", 1e5,[0.1,0.1])
+    state.set_var('vx',0,0.1,0.1)
+    state.set_var('vy',0,0.1,0.1)
     for i in range(0, 3):   
-        assert pytest.approx(sim.cell_param[i].T) == 200
-        assert pytest.approx(sim.cell_param[i].p) == 1e5
-        assert sim.cell_param[i].vx == 0
-        assert sim.cell_param[i].vy == 0
+        assert pytest.approx(state.cell_param[i].T) == 300
+        assert pytest.approx(state.cell_param[i].p) == 1e5
+        assert state.cell_param[i].vx == 0
+        assert state.cell_param[i].vy == 0
 
 def test_get_face_param():
     """Test de la fonction get_face_param"""
-    sim = Etat(mesh=mesh)
-    face_param = sim.get_face_param(0)
+    state = Etat(mesh=mesh)
+    face_param = state.get_face_param(0)
     assert isinstance(face_param, Parametres)
-    assert face_param.T == 200
+    assert face_param.T == 300
     assert face_param.p == 1e5
     assert face_param.vx == 0
 
-    sim.set_var("T", 3, 0)
-    sim.set_var("T", 2, 1)
-    sim.set_var("T", 1, 2)
-    sim.set_var("T", 1, 3)
+    state.set_var("T", 3, 0)
+    state.set_var("T", 2, 1)
+    state.set_var("T", 1, 2)
+    state.set_var("T", 1, 3)
 
-    face1_param = sim.get_face_param(1)
-    face3_param = sim.get_face_param(3)
-    face4_param = sim.get_face_param(4)
+    face1_param = state.get_face_param(1)
+    face3_param = state.get_face_param(3)
+    face4_param = state.get_face_param(4)
 
     assert pytest.approx(face1_param.T) == 5 / 2
     assert pytest.approx(face3_param.T) == 5 / 3
     assert pytest.approx(face4_param.T) == 5 / 3
 
 def test_get_grad_cell():
-    sim = Etat(mesh=mesh)
+    state = Etat(mesh=mesh)
 
-    grad1_init = sim.get_grad_cell(1,'T')
+    grad1_init = state.get_grad_cell(1,'T')
     np.testing.assert_array_almost_equal(grad1_init,vecteur_nul)
 
-    sim.set_var("T", 3, 0)
-    sim.set_var("T", 2, 1)
-    sim.set_var("T", 1, 2)
-    sim.set_var("T", 1, 3)
+    state.set_var("T", 3, 0)
+    state.set_var("T", 2, 1)
+    state.set_var("T", 1, 2)
+    state.set_var("T", 1, 3)
 
-    grad1 = sim.get_grad_cell(1,'T')
+    grad1 = state.get_grad_cell(1,'T')
     expected = np.array([-5/3,-5/3])
     np.testing.assert_array_almost_equal(grad1,expected)
 
 def test_compute_gradient():
-    sim = Etat(mesh=mesh)
-    gradT = sim.compute_gradient('T')
+    state = Etat(mesh=mesh)
+    gradT = state.compute_gradient('T')
     for i in range(len(gradT)):
         assert (gradT[i]==vecteur_nul).all()
-    sim.set_var("T", 3, 0)
-    sim.set_var("T", 2, 1)
-    sim.set_var("T", 1, 2)
-    sim.set_var("T", 1, 3)
+    state.set_var("T", 3, 0)
+    state.set_var("T", 2, 1)
+    state.set_var("T", 1, 2)
+    state.set_var("T", 1, 3)
 
-    gradT = sim.compute_gradient('T')
+    gradT = state.compute_gradient('T')
     expected = np.array([-5/3,-5/3])
     np.testing.assert_array_almost_equal(gradT[1] , expected)
 
-    sim.set_var("vx", 3, 0)
-    sim.set_var("vx", 2, 1)
-    sim.set_var("vx", 1, 2)
-    sim.set_var("vx", 1, 3)
-    gradVx = sim.compute_gradient('vx')
+    state.set_var("vx", 3, 0)
+    state.set_var("vx", 2, 1)
+    state.set_var("vx", 1, 2)
+    state.set_var("vx", 1, 3)
+    gradVx = state.compute_gradient('vx')
     np.testing.assert_array_almost_equal(gradVx[1] , expected)
 
 
 def test_tensors():
-    sim = Etat(mesh=mesh)
-    sim.set_var("vx", 3, 0)
-    sim.set_var("vx", 2, 1)
-    sim.set_var("vx", 1, 2)
-    sim.set_var("vx", 1, 3)
-    sim.compute_gradient()
-    for i in range(1,sim.mesh.size):
-        grad = getattr(sim.cell_param[i], 'gradvx')
+    state = Etat(mesh=mesh)
+    state.set_var("vx", 3, 0)
+    state.set_var("vx", 2, 1)
+    state.set_var("vx", 1, 2)
+    state.set_var("vx", 1, 3)
+    state.compute_gradient()
+    for i in range(1,state.mesh.size):
+        grad = getattr(state.cell_param[i], 'gradvx')
         assert (grad!=0).any() ,f"Gradient nul en cellule {i}\n"
-    sim.compute_tensors()
+    state.compute_tensors()
 
-    s1 = getattr(sim.cell_param[1], 'S')
+    s1 = getattr(state.cell_param[1], 'S')
     print(f'S en cellule 1 :\n{s1}\n ')
-    W1 = getattr(sim.cell_param[1], 'Omega')
+    W1 = getattr(state.cell_param[1], 'Omega')
     print(f'Omega en cellule 1 :\n{W1}\n ')
     assert (s1!=0).any()
     #  tester avec des vrais valeurs
@@ -257,38 +257,38 @@ def test_tensors():
 
 def test_update_all_param():
     """Test the update_all_param method of the Sim class."""
-    sim = Etat(mesh=mesh)
-    sim.set_var("vx", 0, 0)
-    sim.set_var("vx", 0.5, 1)
-    sim.set_var("vx", 0, 2)
-    sim.set_var("vx", 1, 3)
+    state = Etat(mesh=mesh)
+    state.set_var("vx", 0, 0)
+    state.set_var("vx", 0.5, 1)
+    state.set_var("vx", 0, 2)
+    state.set_var("vx", 1, 3)
 
-    sim.set_var("vy", 0, 0)
-    sim.set_var("vy", -0.5, 1)
-    sim.set_var("vy", -1, 2)
-    sim.set_var("vy", 0, 3)
+    state.set_var("vy", 0, 0)
+    state.set_var("vy", -0.5, 1)
+    state.set_var("vy", -1, 2)
+    state.set_var("vy", 0, 3)
 
-    sim.set_var("k", 10, 0)
-    sim.set_var("k", 0.5, 1)
-    sim.set_var("k", 0, 2)
-    sim.set_var("k", 0.5, 3)
+    state.set_var("k", 10, 0)
+    state.set_var("k", 0.5, 1)
+    state.set_var("k", 0, 2)
+    state.set_var("k", 0.5, 3)
 
-    sim.set_var("w", 2, 0)
-    sim.set_var("w", 0.5, 1)
-    sim.set_var("w", 1, 2)
-    sim.set_var("w", 1, 3)
+    state.set_var("w", 2, 0)
+    state.set_var("w", 0.5, 1)
+    state.set_var("w", 1, 2)
+    state.set_var("w", 1, 3)
 
-    sim.update_all_param()
+    state.update_all_param()
     print("    Vx,   Vy,     k,    w,     gradVx,       gradVy,         gradk  ,         gradw :")
-    for i in range( sim.mesh.size):
-        cell = sim.cell_param[i]
+    for i in range( state.mesh.size):
+        cell = state.cell_param[i]
         print(f"{i}   {cell.vx:.2f}, {cell.vy:.2f}, {cell.k:.2f}, {cell.w:.2f} "
               f"  [{' '.join(f'{val:.2f}' for val in getattr(cell,'gradvx'))}] "
               f"  [{' '.join(f'{val:.2f}' for val in getattr(cell,'gradvy'))}] "
               f"  [{' '.join(f'{val:.2f}' for val in getattr(cell,'gradk'))}] "
               f"  [{' '.join(f'{val:.2f}' for val in getattr(cell,'gradw'))}]")
 
-    tau1 = getattr(sim.cell_param[1], 'tau')
+    tau1 = getattr(state.cell_param[1], 'tau')
     assert tau1[0][0] == pytest.approx(-0.162, rel=1e-2)
     assert tau1[0][1] == pytest.approx(0, rel=1e-2)
     assert tau1[1][0] == pytest.approx(0, rel=1e-2)
@@ -296,25 +296,19 @@ def test_update_all_param():
 
 def test_sub():
     """Test the sub method of the Sim class."""
-    sim = VarEtat(mesh=mesh)
-    sim.set_var("T", 3, 0)
-    sim.set_var("T", 2, 1)
-    sim.set_var("T", 1, 2)
-    sim.set_var("T", 1, 3)
+    state = VarEtat(mesh=mesh)
+    state.set_var("T", 3, 0)
+    state.set_var("T", 2, 1)
+    state.set_var("T", 1, 2)
+    state.set_var("T", 1, 3)
 
     other_sim = VarEtat(mesh=mesh)
     other_sim.set_var("T", 0, 0)
-    result = other_sim - sim
+    result = other_sim - state
 
     assert isinstance(result, Etat)
-    assert len(result.cell_param) == len(sim.cell_param)
+    assert len(result.cell_param) == len(state.cell_param)
     assert result.cell_param[0].T == -3
-
-def test_CL() :
-    sim = Sim(mesh=mesh)
-    sim.set_CL("vx",10,"in")
-    sim.set_CL("vy",0,"in")
-    sim.set_CL("p",1e5,"out")
 
 if __name__=="__main__" :
     

@@ -56,7 +56,7 @@ class MeshInspector:
         """Plot a single cell with its nodes and centroid."""
         self.ax.clear()
         cell = self.mesh.cells[cell_index]
-        nodes = self.mesh.nodes[cell.nodes]
+        nodes = self.mesh.nodes[cell.nodes_index]
 
         self.ax.plot(nodes[:, 0], nodes[:, 1], 'bo-', label="Cell Nodes")
         self.ax.fill(nodes[:, 0], nodes[:, 1], alpha=0.3, label="Cell Area")
