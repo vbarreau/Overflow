@@ -3,30 +3,30 @@ import numpy as np
 import pytest
 
 sys.path.append(r"D:/OneDrive/Documents/11-Codes/overflow/02_RANS")
-from maillage import *
+from geom import *
 
 node1 = np.array([0, 0])
 node2 = np.array([1, 0])
 node3 = np.array([0, 1])
 nodes_ligne = np.array([[0, 0], [1, 0], [0, 1], [1, 1], [0, 2], [1, 2], [2, 1], [2, 0]])
-f0 = Mesh.Face(0, [0, 1], [0], nodes_ligne)
-f1 = Mesh.Face(1, [1, 2], [0, 1], nodes_ligne)
-f2 = Mesh.Face(2, [0, 2], [0], nodes_ligne)
-f3 = Mesh.Face(3, [1, 3], [1, 3], nodes_ligne)
-f4 = Mesh.Face(4, [2, 3], [1, 2], nodes_ligne)
-f5 = Mesh.Face(5, [2, 4], [2], nodes_ligne)
-f6 = Mesh.Face(6, [4, 5], [2], nodes_ligne)
-f7 = Mesh.Face(7, [3, 5], [2], nodes_ligne)
-f8 = Mesh.Face(8, [3, 6], [3], nodes_ligne)
-f9 = Mesh.Face(9, [6, 7], [3], nodes_ligne)
-f10 = Mesh.Face(10, [1, 7], [3], nodes_ligne)
+f0 = Face(0, [0, 1], [0], nodes_ligne)
+f1 = Face(1, [1, 2], [0, 1], nodes_ligne)
+f2 = Face(2, [0, 2], [0], nodes_ligne)
+f3 = Face(3, [1, 3], [1, 3], nodes_ligne)
+f4 = Face(4, [2, 3], [1, 2], nodes_ligne)
+f5 = Face(5, [2, 4], [2], nodes_ligne)
+f6 = Face(6, [4, 5], [2], nodes_ligne)
+f7 = Face(7, [3, 5], [2], nodes_ligne)
+f8 = Face(8, [3, 6], [3], nodes_ligne)
+f9 = Face(9, [6, 7], [3], nodes_ligne)
+f10 = Face(10, [1, 7], [3], nodes_ligne)
 
 faces_ligne = np.array([f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10])
 
-cell0 = Mesh.Cell(0, [0, 1, 2], [0, 1, 2], [1], nodes_ligne)
-cell1 = Mesh.Cell(1, [1, 3, 4], [1, 3, 2], [0, 2], nodes_ligne)
-cell2 = Mesh.Cell(2, [4, 5, 6, 7], [2, 3, 4, 5], [1], nodes_ligne)
-cell3 = Mesh.Cell(3, [3, 8, 9, 10], [1, 3, 6, 7], [1], nodes_ligne)
+cell0 = Cell(0, [0, 1, 2], [0, 1, 2], [1], nodes_ligne)
+cell1 = Cell(1, [1, 3, 4], [1, 3, 2], [0, 2,3], nodes_ligne)
+cell2 = Cell(2, [4, 5, 6, 7], [2, 3, 4, 5], [1], nodes_ligne)
+cell3 = Cell(3, [3, 8, 9, 10], [1, 3, 6, 7], [1], nodes_ligne)
 
 cells_ligne = np.array([cell0, cell1, cell2, cell3])
 
@@ -51,11 +51,11 @@ def test_cell_centroid():
 
 
 def test_cell_sort_nodes():
-    cell = Mesh.Cell(0, [0, 1, 2], [0, 1, 2], [], nodes_ligne)
+    cell = Cell(0, [0, 1, 2], [0, 1, 2], [], nodes_ligne)
     sorted_nodes = np.array([0, 1, 2])
     np.testing.assert_array_almost_equal(cell.nodes_index, sorted_nodes)
 
-    cell = Mesh.Cell(0, [0, 1, 2, 3], [0, 1, 2, 3, 4], [], nodes_ligne)
+    cell = Cell(0, [0, 1, 2, 3], [0, 1, 2, 3, 4], [], nodes_ligne)
     sorted_nodes = np.array([0, 1, 3, 4, 2])
     np.testing.assert_array_almost_equal(cell.nodes_index, sorted_nodes)
 
@@ -121,7 +121,6 @@ def test_surface():
     assert f1.owner == 1
 
 def test_set_boundary():
-    mesh.set_boundary()
     assert mesh.cells[0].is_boundary == 1
     assert mesh.cells[1].is_boundary == 0
     assert mesh.cells[2].is_boundary == 1

@@ -1,4 +1,4 @@
-from maillage import *
+from geom import *
 
 XI          = 0
 f_beta      = 1
@@ -155,9 +155,7 @@ class Etat():
     def __init__(self, *args, **kwargs)->None:
         if (len(args) == 1 and isinstance(args[0], str)) or (len(kwargs) == 1 and 'filename' in kwargs and isinstance(kwargs['filename'], str)):
             filename = kwargs['filename'] if 'filename' in kwargs else args[0]
-            t = time.time()
             self.mesh = Mesh(filename=filename)
-            print(f"Temps de chargement du maillage : {time.time()-t} s")
         elif len(kwargs) == 1 and 'mesh' in kwargs and isinstance(kwargs['mesh'], Mesh):
             self.mesh = kwargs['mesh']
         else:

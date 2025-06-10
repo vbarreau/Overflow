@@ -4,7 +4,7 @@ from tkinter import ttk
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 sys.path.append(r"D:/OneDrive/Documents/11-Codes/overflow/02_RANS")
-from maillage import Mesh
+from geom import Mesh
 
 
 class MeshInspector:

@@ -1,8 +1,6 @@
 import numpy as np 
 import matplotlib.pyplot as plt 
 from tqdm import tqdm
-import time
-
 
 def surface_triangle(node1, node2, node3):
     """Calcul de la surface d'un triangle par le produit vectoriel"""
@@ -42,6 +40,127 @@ def points_toward_cell(centre_cell,centre_face,normale) :
     return np.dot(vec,normale)>0
 
 
+class MeshError(Exception):
+    """Classe d'erreur pour le maillage"""
+    def __init__(self, message):
+        self.message = message
+        super().__init__(self.message)
+
+class GeomObject() :
+    def __init__(self,i, nodes_index,nodes:np.array):
+        """Initialisation de l'objet géométrique"""
+        self.indice_global = i 
+        self.nodes_index = np.array(nodes_index)
+        self.centroid = np.mean(nodes[nodes_index], axis=0)
+
+class Face(GeomObject) :
+    def __init__(self, i, nodes_index,cells_index,nodes:np.array):
+        assert len(nodes_index) == 2 , "Face must have exactly 2 nodes in a 2D mesh"
+        if len(cells_index) == 0 :
+            raise MeshError("La face n'a pas de cellules contiguës")
+        super().__init__(i, nodes_index,nodes)
+        self.normal = self.get_normal(nodes)
+        self.surface = self.length(nodes) * self.get_normal(nodes)
+        self.cells = np.array(cells_index,dtype=int)
+
+
+    def __repr__(self):
+        return f"Face {self.indice_global} with nodes {self.nodes_index} and normal {self.normal}"
+    
+    def get_normal(self,nodes:np.array)->np.array:
+        """Calcul de la normale à la face"""
+        face_nodes = nodes[self.nodes_index]
+        face_vector = (face_nodes[1] - face_nodes[0])
+        # On calcule le vecteur normal à la face
+        normal = np.array([-face_vector[1], face_vector[0]],dtype=float)
+        # On normalise le vecteur
+        normal /= np.linalg.norm(normal)
+        return normal
+
+    def set_owner(self,nodes:np.array,cells)->None:
+        """Set le propriétaire de la face"""
+        self.owner = -1
+        try : 
+            self.neighbour = self.cells[0]
+        except :
+            raise MeshError("La face n'a pas de cellule contiguë")
+        normale = self.get_normal(nodes)
+        if len(self.cells) == 1:
+            self.owner = self.cells[0]
+            self.neighbour = -1
+            # Ensure the surface vector points outward the owner cell
+            
+            if points_toward_cell(cells[self.cells[0]].centroid,self.centroid,normale):
+                self.surface = -self.length(nodes) * self.get_normal(nodes)
+        elif len(self.cells) == 2:
+            cell0 = cells[self.cells[0]]
+            cell1 = cells[self.cells[1]]
+            c0 = cell0.centroid
+            c1 = cell1.centroid
+
+            if points_toward_cell(cells[self.cells[0]].centroid,self.centroid,normale):
+                self.owner = self.cells[1]
+                self.neighbour = self.cells[0]
+            else:
+                self.owner = self.cells[0]
+                self.neighbour = self.cells[1]
+
+    def length(self,nodes:np.array)->float:
+        """Calcul de la longueur de la face"""
+        nodes = nodes[self.nodes_index]
+        return np.linalg.norm(nodes[0] - nodes[1])
+    
+
+class Cell(GeomObject) :
+
+    def __init__(self,i:int,faces_index:list,nodes_index:list,voisins:list,nodes:np.array):
+        super().__init__(i, nodes_index,nodes)
+        self.faces = np.array(faces_index,dtype=int)
+        self.voisins = np.array(voisins,dtype=int)
+        self.sort_nodes(nodes)
+        self.volume = self.get_volume(nodes)
+        self.is_boundary = len(self.voisins) < len(self.faces)
+
+    def __repr__(self):
+        return f"Cell {self.indice_global} : \nfaces : {self.faces}\nNoeuds : {self.nodes_index}\nVoisins : {self.voisins}\n"
+    
+    def sort_nodes(self,nodes:np.array)->None:
+        """Tri des noeuds de la cellule dans le sens trigonométrique"""
+        # On prend le premier noeud comme référence
+        nodes = nodes[self.nodes_index]
+        c_node = centre(nodes)
+
+        # On calcule les angles
+        angles = np.zeros(len(nodes))
+        for i in range(len(nodes)):
+            # On calcule l'angle entre le noeud et le centre de la cellule
+            angles[i] = np.arctan2(nodes[i][1]-c_node[1], nodes[i][0]-c_node[0])
+        # On trie les noeuds en fonction des angles
+        sorted_indices = np.argsort(angles)
+        self.nodes_index = self.nodes_index[sorted_indices]
+
+    def get_volume(self,nodes:np.array)->float:
+        nodes = nodes[self.nodes_index]
+        V = surface_triangle(nodes[0], nodes[1], nodes[2])
+        for i in range(3, len(nodes)):
+            V += surface_triangle(nodes[0], nodes[i-1], nodes[i])
+        return V
+    
+    def contains(self, x,y,nodes)->bool:
+        """Vérifie si le point (x,y) est dans la cellule"""
+        node = np.array([x,y]) 
+        angles = np.zeros(len(self.nodes_index))
+        for i in range(len(self.nodes_index)):
+            i_node = self.nodes_index[i]
+            # On calcule l'angle entre le noeud, le centre de la cellule et son horizontale
+            angles[i] = np.arctan2(node[1]-nodes[i_node][1], node[0]-nodes[i_node][0])
+        delta = abs(max(angles) - min(angles))
+        if delta >= np.pi:
+            return True
+        else:
+            return False
+
+
 class Mesh():
 
     def __init__(self, **kwargs):
@@ -61,13 +180,11 @@ class Mesh():
         for face in self.faces:
             face.set_owner(self.nodes, self.cells)
 
-        self.set_boundary()
         self.size = len(self.cells)
         step = 0
         for face in self.faces:
             step += np.linalg.norm(face.surface)
         self.mean_step = step/len(self.faces)
-
 
     def read_mesh(self, filename:str,faces_per_cell = 4)->None:
         lines = open(filename, 'r').readlines()
@@ -148,126 +265,6 @@ class Mesh():
             cell = self.cells[i]
             self.cell_volume[i] = cell.volume
     
-    class Face():
-        def __init__(self, i:int, nodes_index:list, cells_index,nodes):
-
-            self.indice_global = i
-            self.nodes_index = np.array(nodes_index)
-            self.centroid = centre(nodes[nodes_index])
-            self.surface = self.length(nodes) * self.get_normal(nodes)
-            self.cells = np.array(cells_index,dtype=int)
-            if len(cells_index) == 0 :
-                raise MeshError("La face n'a pas de cellules contiguës")
-            assert len(nodes_index) == 2 , "La face n'a pas 2 noeuds"
-
-        def __repr__(self):
-            return f"Face {self.indice_global} : \n{self.nodes_index}\nCentre : {self.centroid}\nSurface : {self.surface}\n"
-        
-        def length(self,nodes:np.array)->float:
-            """Calcul de la longueur de la face"""
-            nodes = nodes[self.nodes_index]
-            return np.linalg.norm(nodes[0] - nodes[1])
-        
-        def get_normal(self,nodes:np.array)->np.array:
-            """Calcul de la normale à la face"""
-            face_nodes = nodes[self.nodes_index]
-            face_vector = (face_nodes[1] - face_nodes[0])
-            # On calcule le vecteur normal à la face
-            normal = np.array([-face_vector[1], face_vector[0]],dtype=float)
-            # On normalise le vecteur
-            normal /= np.linalg.norm(normal)
-            return normal
-        
-        def set_owner(self,nodes:np.array,cells)->None:
-            """Set le propriétaire de la face"""
-            self.owner = -1
-            try : 
-                self.neighbour = self.cells[0]
-            except :
-                raise MeshError("La face n'a pas de cellule contiguë")
-            normale = self.get_normal(nodes)
-            if len(self.cells) == 1:
-                self.owner = self.cells[0]
-                self.neighbour = -1
-                # Ensure the surface vector points outward the owner cell
-                
-                if points_toward_cell(cells[self.cells[0]].centroid,self.centroid,normale):
-                    self.surface = -self.length(nodes) * self.get_normal(nodes)
-            elif len(self.cells) == 2:
-                cell0 = cells[self.cells[0]]
-                cell1 = cells[self.cells[1]]
-                c0 = cell0.centroid
-                c1 = cell1.centroid
-
-                if points_toward_cell(cells[self.cells[0]].centroid,self.centroid,normale):
-                    self.owner = self.cells[1]
-                    self.neighbour = self.cells[0]
-                else:
-                    self.owner = self.cells[0]
-                    self.neighbour = self.cells[1]
-
-    class Cell():
-        def __init__(self,i:int,faces_index:list,nodes_index:list,voisins:list,nodes:np.array):
-            self.indice_global = i
-            self.faces = np.array(faces_index)
-            self.nodes_index = np.array(nodes_index)
-            self.voisins = np.array(voisins)
-            self.centroid = np.mean(nodes[self.nodes_index], axis=0)
-            self.sort_nodes(nodes)
-            self.volume = self.get_volume(nodes)
-            self.is_boundary = False
-
-            
-        def __repr__(self):
-            return f"Cell {self.indice_global} : \nfaces : {self.faces}\nNoeuds : {self.nodes_index}\nVoisins : {self.voisins}\n"
-        
-        def sort_nodes(self,nodes:np.array)->None:
-            """Tri des noeuds de la cellule dans le sens trigonométrique"""
-            # On prend le premier noeud comme référence
-            nodes = nodes[self.nodes_index]
-            c_node = centre(nodes)
-
-            # On calcule les angles
-            angles = np.zeros(len(nodes))
-            for i in range(len(nodes)):
-                # On calcule l'angle entre le noeud et le centre de la cellule
-                angles[i] = np.arctan2(nodes[i][1]-c_node[1], nodes[i][0]-c_node[0])
-            # On trie les noeuds en fonction des angles
-            sorted_indices = np.argsort(angles)
-            self.nodes_index = self.nodes_index[sorted_indices]
-
-
-        def get_volume(self,nodes:np.array)->float:
-            nodes = nodes[self.nodes_index]
-            V = surface_triangle(nodes[0], nodes[1], nodes[2])
-            for i in range(3, len(nodes)):
-                V += surface_triangle(nodes[0], nodes[i-1], nodes[i])
-            return V
-        
-        def contains(self, x,y,nodes)->bool:
-            """Vérifie si le point (x,y) est dans la cellule"""
-            node = np.array([x,y]) 
-            angles = np.zeros(len(self.nodes_index))
-            for i in range(len(self.nodes_index)):
-                i_node = self.nodes_index[i]
-                # On calcule l'angle entre le noeud, le centre de la cellule et son horizontale
-                angles[i] = np.arctan2(node[1]-nodes[i_node][1], node[0]-nodes[i_node][0])
-            delta = abs(max(angles) - min(angles))
-            if delta >= np.pi:
-                return True
-            else:
-                return False
-        
-    def set_boundary(self)->None:
-        """Définition des cellules frontières"""
-        for cell in self.cells:
-            # Si l'une des faces n'a qu'une cellule contiguë, la cellule est une frontière
-            for face_index in cell.faces:
-                face = self.faces[face_index]
-
-                if len(np.where(face.cells >=0)[0]) == 1:
-                    cell.is_boundary = True
-                    break
 
     def span(self):
         """Calcul de l'étendue du maillage"""
@@ -334,12 +331,6 @@ class Mesh():
             if cell.contains(x,y,self.nodes):
                 return i
 
-class MeshError(Exception):
-    """Classe d'erreur pour le maillage"""
-    def __init__(self, message):
-        self.message = message
-        super().__init__(self.message)
-
 
 if __name__ ==  "__main__" :
     
@@ -347,27 +338,28 @@ if __name__ ==  "__main__" :
     node2 = np.array([1, 0])
     node3 = np.array([0, 1])
     nodes_ligne = np.array([[0, 0], [1, 0], [0, 1], [1, 1], [0, 2], [1, 2], [2, 1], [2, 0]])
-    f0 = Mesh.Face(0, [0, 1], [0], nodes_ligne)
-    f1 = Mesh.Face(1, [1, 2], [0, 1], nodes_ligne)
-    f2 = Mesh.Face(2, [0, 2], [0], nodes_ligne)
-    f3 = Mesh.Face(3, [1, 3], [1, 3], nodes_ligne)
-    f4 = Mesh.Face(4, [2, 3], [1, 2], nodes_ligne)
-    f5 = Mesh.Face(5, [2, 4], [2], nodes_ligne)
-    f6 = Mesh.Face(6, [4, 5], [2], nodes_ligne)
-    f7 = Mesh.Face(7, [3, 5], [2], nodes_ligne)
-    f8 = Mesh.Face(8, [3, 6], [3], nodes_ligne)
-    f9 = Mesh.Face(9, [6, 7], [3], nodes_ligne)
-    f10 = Mesh.Face(10, [1, 7], [3], nodes_ligne)
+    f0 = Face(0, [0, 1], [0], nodes_ligne)
+    f1 = Face(1, [1, 2], [0, 1], nodes_ligne)
+    f2 = Face(2, [0, 2], [0], nodes_ligne)
+    f3 = Face(3, [1, 3], [1, 3], nodes_ligne)
+    f4 = Face(4, [2, 3], [1, 2], nodes_ligne)
+    f5 = Face(5, [2, 4], [2], nodes_ligne)
+    f6 = Face(6, [4, 5], [2], nodes_ligne)
+    f7 = Face(7, [3, 5], [2], nodes_ligne)
+    f8 = Face(8, [3, 6], [3], nodes_ligne)
+    f9 = Face(9, [6, 7], [3], nodes_ligne)
+    f10 = Face(10, [1, 7], [3], nodes_ligne)
 
     faces_ligne = np.array([f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10])
 
-    cell0 = Mesh.Cell(0, [0, 1, 2], [0, 1, 2], [1], nodes_ligne)
-    cell1 = Mesh.Cell(1, [1, 3, 4], [1, 3, 2], [0, 2], nodes_ligne)
-    cell2 = Mesh.Cell(2, [4, 5, 6, 7], [2, 3, 4, 5], [1], nodes_ligne)
-    cell3 = Mesh.Cell(3, [3, 8, 9, 10], [1, 3, 6, 7], [1], nodes_ligne)
+    cell0 = Cell(0, [0, 1, 2], [0, 1, 2], [1], nodes_ligne)
+    cell1 = Cell(1, [1, 3, 4], [1, 3, 2], [0, 2], nodes_ligne)
+    cell2 = Cell(2, [4, 5, 6, 7], [2, 3, 4, 5], [1], nodes_ligne)
+    cell3 = Cell(3, [3, 8, 9, 10], [1, 3, 6, 7], [1], nodes_ligne)
 
     cells_ligne = np.array([cell0, cell1, cell2, cell3])
 
     mesh = Mesh(cells=cells_ligne, nodes=nodes_ligne, faces=faces_ligne)
 
     mesh.plot_mesh()  # Affiche le maillage
+    plt.show()
