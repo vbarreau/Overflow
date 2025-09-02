@@ -102,11 +102,11 @@ def test_contains():
 
 def test_find_cell():
     """Test de la fonction find_cell"""
-    cell = mesh.find_cell(0.1, 0.1)
+    cell = mesh.find_cell_index(0.1, 0.1)
     assert cell == 0
-    cell = mesh.find_cell(1.5, 0.5)
+    cell = mesh.find_cell_index(1.5, 0.5)
     assert cell == 3
-    cell = mesh.find_cell(2, 2)
+    cell = mesh.find_cell_index(2, 2)
     assert cell is None
 
 def test_surface():

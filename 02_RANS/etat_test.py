@@ -13,7 +13,7 @@ init(autoreset=True)
 
 # l'objet mesh est importé depuis le fichier maillage.py
 #  __
-# |__|__
+# | _|__
 # |_\|__|
 
 # mesh.complete_plot() pour afficher le maillage

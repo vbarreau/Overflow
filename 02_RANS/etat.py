@@ -1,147 +1,10 @@
 from geom import *
-
-XI          = 0
-f_beta      = 1
-ALPHA       = 13 / 25
-BETA_0      = 0.0708
-BETA        = BETA_0
-BETA_STAR   = 0.09
-SIGMA       = 0.5
-SIGMA_STAR  = 0.6
-SIGMA_DO    = 1 / 8
-CLIM       = 7 / 8
-
-RHO = 1000
-NU = 1e-3
-CV = 4186
-LAMBDA = 0.606
-MU = NU * RHO
+from Param import *
+from model import psi_OSPRE
 
 
-class Parametres:
-    """Classe pour les parametres de la cellule"""
-    def __init__(self, T: float = 300, p: float = 1e5, vx: float = 0, vy: float = 0,k = 1, w = 1) -> None:
-        self.T          = T
-        self.p          = p
-        self.vx         = vx
-        self.vy         = vy
-        self.gradT      = np.ones(2)
-        self.gradgradtT = np.zeros(2) 
-        self.gradp      = np.zeros(2)
-        self.gradvx     = np.zeros(2)
-        self.gradvy     = np.zeros(2)
-        self.S          = np.zeros((2, 2))  # Tenseur des deformations
-        self.Omega      = np.zeros((2, 2))  # Tenseur de vorticité
-        self.tau        = np.zeros((2, 2))  # tenseur de turbulences
-        
-        self.k          = k          # Turbulent kinetic energy
-        self.w          = w          # Specific dissipation rate
-        self.w_bar      = 1.0
-        self.Nu_t       = 0.0           # Turbulent viscosity
-        self.f_beta     = 0.0           # Beta function
-        self.xi_omega   = 0.0           # Xi omega parameter
-        # self.epsilon    = 0.0           # Dissipation rate
-        # self.l          = 0.0           # Turbulence length scale
-        self.sigma_d    = 0.0           # Scalar parameter
-        self.gradk     = np.zeros(2)   # Gradient of turbulent kinetic energy
-        self.gradw     = np.zeros(2)   # Gradient of specific dissipation rate
-        self.gamma_k     = (NU + SIGMA_STAR*self.k/self.w)*self.gradk
-        self.gamma_w     = (NU + SIGMA * self.k/self.w)*self.gradw  
-        self.v_sink      = np.zeros((2,2,2))   # tenseur de puit de vitesse
+RELAX = 0.1
 
-        self.condition = [] 
-
-    def reset_CL(self):
-        """Reset the condition of the cell"""
-        for cl in self.condition: 
-            setattr(self, cl.var, cl.value)
-        else :
-            return
-
-    def div_v(self) -> float:
-        """Calcul de la divergence de la vitesse"""
-        return self.gradvx[0] + self.gradvy[1]
-    
-    def w_bar_min(self) -> float:
-        """Renvoie la valeur minimale de w_bar"""
-        s2 = (self.S*self.S).sum()
-        return CLIM*np.sqrt(2*s2/BETA_STAR)
-
-    def set_cell_tensor(self):
-        gradV = np.zeros((2,2))
-        gradV[0] = self.gradvx
-        gradV[1] = self.gradvy
-        S = np.zeros((2,2))
-        W = np.zeros((2,2))
-        for i in range(2):
-            for j in range(2):
-                t1 = gradV[i,j]
-                t2 = gradV[j,i]
-                S[i,j] = t1 + t2 
-                if i!=j :
-                    W[i,j] = t1-t2
-        S = 0.5*S 
-        W = 0.5*W
-        self.S = S 
-        self.Omega = W 
-        return
-
-    def update_values(self)-> None: 
-        # k,w et S doivent etre mis a jour avant   
-        # self.p = self.T * (287.05 * RHO)
-        k = self.k
-        w = self.w
-        # self.epsilon = BETA_STAR*w*k
-        # self.l = np.sqrt(k)/w 
-        check = 0
-        gradk = self.gradk
-        gradw = self.gradw
-        check  = np.dot(gradk,gradw).sum()
-        if check <= 0 :
-            self.sigma_d = 0
-        else :
-            self.sigma_d = SIGMA_DO
-        
-        self.w_bar = max(self.w,self.w_bar_min())
-        self.Nu_t = self.k / self.w_bar
-        self.tau = 2*self.Nu_t*self.S - 2/3 * self.k * np.eye(2)
-        self.gamma_k     = (NU + SIGMA_STAR*self.k/self.w)*self.gradk         # Turbulent kinetic energy production
-        self.gamma_w     = (NU + SIGMA * self.k/self.w)*self.gradw           # Specific dissipation rate production
-
-    def update_B(self)-> None:
-        """Met a jour la constante de Bernoulli"""
-        self.B = self.p + 0.5*RHO*(self.vx**2 + self.vy**2)
-        return None
-
-    def add_CL(self,condition)->None:
-        """Ajoute une condition limite à la cellule"""
-        self.condition.append(condition)
-        return None
-    
-    def solve_momentum(self) -> tuple:
-        """Renvoie les variations temporelles de la cellule"""
-        dVx = -self.vx*self.gradvx[0]- self.vy*self.gradvx[1] + (-self.gradp[0] + self.v_sink[0,0,0] + self.v_sink[1,0,1] )/RHO  
-        dVy = -self.vx*self.gradvy[0]- self.vy*self.gradvy[1] + (-self.gradp[1] + self.v_sink[0,1,0] + self.v_sink[1,1,1] )/RHO 
-        return dVx, dVy
-    
-    def solve_turbulence(self,prod_k,prod_w) -> tuple:
-        """Renvoie les variations temporelles de k et w"""
-        A =0 #  A = sum_{i,j}(tau[i,j] * dUi/dxj)
-        for i in range(2):
-            for j in range(2):
-                if i == 0 :
-                    gv = self.gradvx
-                else :
-                    gv = self.gradvy
-                A += self.tau[i,j]*gv[j] # l'indice i de gv n'est pas nécessaire car selectionné avec les if précédents
-        dk = -self.vx*self.gradk[0]- self.vy*self.gradk[1] + A - BETA_STAR*self.k*self.w + prod_k.sum() 
-        dw = -self.vx*self.gradw[0]- self.vy*self.gradw[1] + ALPHA * self.w/self.k * A - BETA*self.w**2 + self.sigma_d*(self.gradk*self.gradw).sum()  + prod_w.sum()
-        return dk, dw
-    
-    def solve_energy(self) -> float:
-        dT = (-self.p*self.div_v() + LAMBDA*self.gradgradtT.sum() + 2*MU*(self.S*self.S).sum()-2/3*MU*self.div_v()**2)/RHO
-        return dT
-        
 
 class CL():
     """Classe pour les conditions limites
@@ -161,12 +24,23 @@ class Etat():
         else:
             raise ValueError("Invalid arguments: expected 'filename' or 'mesh' as input.")
         self.cell_param = [Parametres() for _ in range(len(self.mesh.cells))]
+        self.face_param = [Parametres() for _ in range(len(self.mesh.faces))]
 
 # Face
 
     def face_average(self,gn,go,owner,neighbour,var):
+        """Calcul la moyenne de la variable var entre les deux cellules owner et neighbour"""
+        if owner is None:
+            return gn*getattr(self.cell_param[neighbour],var)
+        elif neighbour is None:
+            return go*getattr(self.cell_param[owner],var)
+        else:
+            # On suppose que les deux cellules sont valides
+            # On utilise la moyenne pondérée par le volume des cellules
+            # gn = Vn/(Vo+Vn) et go = Vo/(Vo+Vn)
+            # On utilise getattr pour acceder à la variable de la cellule
 
-        return gn*getattr(self.cell_param[neighbour],var) + go*getattr(self.cell_param[owner],var)
+            return gn*getattr(self.cell_param[neighbour],var) + go*getattr(self.cell_param[owner],var)
 
     def get_face_param(self,face_index:int)->Parametres: 
         """Calcul des parametres de la face"""
@@ -175,24 +49,84 @@ class Etat():
         face = self.mesh.faces[face_index]
         index_owner = face.owner
         index_neighbour = face.neighbour
-        if index_owner == -1 :
+        if index_owner is None :
             return self.cell_param[index_neighbour]
-        elif index_neighbour == -1 :
+        elif index_neighbour is None :
             return self.cell_param[index_owner]
         else :
-
             Vo = cells[face.owner].volume
             Vn = cells[face.neighbour].volume
             gn = Vo/(Vo + Vn)
             go = 1-gn
-            T  = self.face_average(gn,go,index_neighbour,index_owner,'T')
-            k  = self.face_average(gn,go,index_neighbour,index_owner,'k')
-            w  = self.face_average(gn,go,index_neighbour,index_owner,'w')
-            vx = self.face_average(gn,go,index_neighbour,index_owner,'vx')
-            vy = self.face_average(gn,go,index_neighbour,index_owner,'vy')
-            p  = self.face_average(gn,go,index_neighbour,index_owner,'p')
+            T  = self.face_average(gn,go,index_owner,index_neighbour,'T')
+            k  = self.face_average(gn,go,index_owner,index_neighbour,'k')
+            w  = self.face_average(gn,go,index_owner,index_neighbour,'w')
+            vx = self.face_average(gn,go,index_owner,index_neighbour,'vx')
+            vy = self.face_average(gn,go,index_owner,index_neighbour,'vy')
+            p  = self.face_average(gn,go,index_owner,index_neighbour,'p')
             return Parametres(T,p,vx,vy,k,w)
+        
+    def compute_face_param_HR(self,face_index, var:str = 'T',psi = psi_OSPRE)->float:
+        """Calcul le paramètre Haute Résolution de la face"""
+        face = self.mesh.faces[face_index]
+        UU,U,C,D,DD = face.stream(self.mesh)
+        phi_U  = getattr(self.cell_param[U.indice_global] , var)
+        phi_D  = getattr(self.cell_param[D.indice_global] , var)
+        phi_UU = getattr(self.cell_param[UU.indice_global], var)
+        if phi_D == phi_U:
+            phi_f = phi_U
+        else :
+            r = (phi_U-phi_UU)/(phi_D-phi_U)
+            phi_f = phi_U + 0.5*psi(r)*(phi_D-phi_U)
+        setattr(self.face_param[face_index],var, phi_f)
+        return phi_f
+    
+    def compute_face_param_U(self,face_index:int, var:str = 'T')->float:
+        """Calcul le paramètre de la face en utilisant la moyenne de l'interface"""
+        cells = self.mesh.cells
+        face = self.mesh.faces[face_index]
+        index_owner = face.owner
+        index_neighbour = face.neighbour
+        if index_owner is None :
+            return getattr(self.cell_param[index_neighbour],var)
+        elif index_neighbour is None :
+            return getattr(self.cell_param[index_owner],var)
+        else :
+            Vo = cells[face.owner].volume
+            Vn = cells[face.neighbour].volume
+            gn = Vo/(Vo + Vn)
+            go = 1-gn
+            phi = self.face_average(gn,go,index_neighbour,index_owner,var)
+            setattr(self.face_param[face_index],var ,phi)
+            return phi
 
+    def face_flow(self,face_index:int)->float:
+        """Calcul le debit de fluide traversant la face
+        Le débit est positif si le fluide traverse la face dans le sens de son vecteur surface"""
+        # On suppose que l'array face_param est à jour
+        S = self.mesh.faces[face_index].surface
+        face_param = self.get_face_param(face_index)
+        V = np.array([face_param.vx, face_param.vy])
+        return np.dot(S, V)*RHO # On suppose que la vitesse est en m/s et la surface en m², donc le debit est en kg/s
+    
+    def FluxVf(self,face_index , T_f: np.array)->np.array:
+        """Renvoie le flux de vitesse à la face
+        voir p.590 du livre Fluid Mechanics and its Applications"""
+        param_f = self.face_param[face_index]
+        vHR_f = np.array([param_f.vx, param_f.vy])
+        vU_f = np.array( [self.compute_face_param_U(face_index,'vx'),
+                            self.compute_face_param_U(face_index,'vy')] )
+        gradV_f = np.array([param_f.gradxvx, param_f.gradxvy])
+        return -MU*np.dot(gradV_f,T_f) + self.face_flow(face_index)*(vHR_f - vU_f) 
+    
+    def diff_term_f(self,face_index:int,E_f:np.array)->np.array:
+        """Calcul le terme de diffusion à la face"""
+        E_f = self.mesh.faces[face_index].Ef_Tf(self.mesh.cells)[0]
+        d_CF = self.mesh.faces[face_index].distance_des_centres(self.mesh.cells)
+        return MU * E_f / d_CF
+    
+
+    
 # Cell
     def get_grad_cell(self,cell_index, var)->np.array:
         """Calcul du gradient d'une variable dans la cellule"""
@@ -222,9 +156,9 @@ class Etat():
             for i,f in enumerate(self.mesh.faces):
                 val = getattr(self.get_face_param(i),var)
                 flux_f = val*f.surface
-                if f.owner != -1 :
+                if f.owner is not None :
                     grad[f.owner] += flux_f
-                if f.neighbour != -1 :
+                if f.neighbour is not None :
                     grad[f.neighbour] -= flux_f
             grad[:,0] /= self.mesh.cell_volume
             grad[:,1] /= self.mesh.cell_volume
@@ -247,9 +181,9 @@ class Etat():
             flux_f = np.zeros((2,2,2))
             flux_f[0] = val*f.surface[0]
             flux_f[1] = val*f.surface[1]
-            if f.owner != -1 :
+            if f.owner is not None :
                 grad[f.owner] += flux_f
-            if f.neighbour != -1 :
+            if f.neighbour is not None :
                 grad[f.neighbour] -= flux_f
         for i in range(len(grad)):
             # On divise par le volume de la cellule
@@ -274,30 +208,45 @@ class Etat():
             cell.update_values()
             cell.reset_CL()
             
-    
+    def get_var(self,var:str)-> np.array:
+        """Renvoie la valeur de la variable var dans l'état"""
+        if var in self.cell_param[0].__dict__.keys():
+            return np.array([getattr(cell, var) for cell in self.cell_param])
+        else:
+            raise ValueError(f"Variable {var} not found in cell parameters")
+
     def set_var(self,var:str,value:np.array,*args)->None:
-        """Set the value of a variable in the mesh at a given point"""
-        if len(args)==1 and isinstance(args[0],int):
+        """Set the value of a variable in the whole mesh or at a given point if specified"""
+        # Maillage entier
+        if len(args)==0 and isinstance(value, np.ndarray) and value.shape == (len(self.mesh.cells),):
+            # On utilise la valeur pour chaque cellule
+            for i in range(len(self.mesh.cells)):
+                setattr(self.cell_param[i], var, value[i])
+            return None
+
+        # Cellule unique
+        elif len(args)==1 and isinstance(args[0],int):
             # On utilise l'indice de la cellule
             cell_index = args[0]
             setattr(self.cell_param[cell_index], var, value)
             return None
         
+        else :
         # On utilise les coordonnees de la cellule
-        elif len(args) == 1 and isinstance(args[0],np.ndarray) and args[0].shape == (2,):
-            x = args[0][0]
-            y = args[0][1]
-        if len(args) == 1 and isinstance(args[0],list) and len(args[0]) == 2:
-            x = args[0][0]
-            y = args[0][1]
-        elif len(args) == 2 and isinstance(args[0],float) and isinstance(args[1],float):
-            x = args[0]
-            y = args[1]
-        cell_index = self.mesh.find_cell(x,y)
+            if len(args) == 1 and isinstance(args[0],np.ndarray) and args[0].shape == (2,):
+                x = args[0][0]
+                y = args[0][1]
+            elif len(args) == 1 and isinstance(args[0],list) and len(args[0]) == 2:
+                x = args[0][0]
+                y = args[0][1]
+            elif len(args) == 2 and isinstance(args[0],float) and isinstance(args[1],float):
+                x = args[0]
+                y = args[1]
+            cell_index = self.mesh.find_cell_index(x,y)
 
-        if cell_index != None:
-            setattr(self.cell_param[cell_index], var, value)
-        return None
+            if cell_index != None:
+                setattr(self.cell_param[cell_index], var, value)
+            return None
     
     def set_CI(self,var,*args)-> None:
         """ Set the initial condition of the simulation from either a matrix or a function"""
@@ -375,12 +324,12 @@ class Etat():
                 xs = [0]
                 ys = [seed_y[s]]
                 while xmin <= xs[-1] < xmax and ymin <= ys[-1] < ymax :
-                    cell_index = self.mesh.find_cell(xs[-1],ys[-1])
+                    cell_index = self.mesh.find_cell_index(xs[-1],ys[-1])
                     if cell_index == None :
                         while xmin <= x < xmax and cell_index == None :
                             x = xs[-1] + dx
                             y = ys[-1]
-                            cell_index = self.mesh.find_cell(x,y)
+                            cell_index = self.mesh.find_cell_index(x,y)
                     cell = self.mesh.cells[cell_index]
                     V = self.cell_param[cell.indice_global].get_var("v")
                     V = V/V[0] 
@@ -391,12 +340,12 @@ class Etat():
             xs = [specific_seed[1]]
             ys = [specific_seed[1]]
             while xmin <= xs[-1] < xmax and ymin <= ys[-1] < ymax :
-                cell_index = self.mesh.find_cell(xs[-1],ys[-1])
+                cell_index = self.mesh.find_cell_index(xs[-1],ys[-1])
                 if cell_index == None :
                     while xmin <= x < xmax and cell_index == None :
                         x = xs[-1] + dx
                         y = ys[-1]
-                        cell_index = self.mesh.find_cell(x,y)
+                        cell_index = self.mesh.find_cell_index(x,y)
                 cell = self.mesh.cells[cell_index]
                 V = self.cell_param[cell.indice_global].get_var("v")
                 V = V/V[0] 
@@ -471,8 +420,11 @@ class Etat():
 
 class VarEtat(Etat):
     """Classe contenant la variation temporelle d'un etat à l'autre"""
-    def __init__(self, *args, **kwargs)->None:
-        super().__init__(*args, **kwargs)
+    def __init__(self, etat_ini:Etat)->None:
+        """Initialize VarEtat class by copying the structure of initial State"""
+        self.mesh = etat_ini.mesh.copy()
+        self.cell_param = etat_ini.cell_param.copy()
+        self.face_param = etat_ini.face_param.copy()
         for var in self.cell_param[0].__dict__.keys():
             if type(getattr(self.cell_param[0], var)) == float or type(getattr(self.cell_param[0], var)) == int:
                 for cell in self.cell_param:

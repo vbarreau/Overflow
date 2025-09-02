@@ -24,3 +24,4 @@ def CI_cylindre(x,y,A=1,a=2) :
 def CI_uniforme(x,y,A=1) :
     """Condition initiale uniforme"""
     return A
+

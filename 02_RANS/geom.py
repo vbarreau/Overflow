@@ -69,6 +69,11 @@ class GeomObject() :
 
 class Face(GeomObject) :
     def __init__(self, i, nodes_index,cells_index,nodes:np.array):
+        """Initialaze a Face object.\n
+        **i** : global index for the face\n
+        **nodes_index**: list of indices of the nodes forming the face\n
+        **cells_index**: list of indices of the cells adjacent to the face.\n
+        **nodes**: array of all nodes' coordinates in the mesh"""
         assert len(nodes_index) == 2 , "Face must have exactly 2 nodes in a 2D mesh"
         if len(cells_index) == 0 :
             raise MeshError("La face n'a pas de cellules contiguës")
@@ -76,6 +81,11 @@ class Face(GeomObject) :
         self.normal = self.get_normal(nodes)
         self.surface = self.length(nodes) * self.get_normal(nodes)
         self.cells = np.array(cells_index,dtype=int)
+        self.owner = cells_index[0]
+        try :
+            self.neighbour = cells_index[1]
+        except :
+            self.neighbour = None
         # TODO : définir si la face est une frontiere, une paroi ou juste une face de cellule
         self.isWall = False
         self.isBoundary = False
@@ -128,16 +138,16 @@ class Face(GeomObject) :
         nodes = nodes[self.nodes_index]
         return np.linalg.norm(nodes[0] - nodes[1])
     
-    def stream(self,mesh)->float: 
-        """Renvoie les indices des cellules de double amont à double aval"""
+    def stream(self,mesh)-> tuple: 
+        """Renvoie les cellules de double amont à double aval"""
         # Dans le cas d'une frontière, on renvoie seulement la cellule frontière
         # On obtiendra un gradient nul
         if self.owner is None:
             D = mesh.cells[self.neighbour]
-            return D,D,D,D 
+            return D,D,D,D,D
         elif self.neighbour is None:
             C = mesh.cells[self.owner]
-            return C,C,C,C
+            return C,C,C,C,C
         
         C = mesh.cells[self.owner]
         D = mesh.cells[self.neighbour]
@@ -158,27 +168,45 @@ class Face(GeomObject) :
                 UU = U
         return UU,U,C,D,DD
     
+    def getCD(self,cells)-> tuple:
+        """Returns the cenroids of the owner and neighbour cells."""
+        if self.owner is None :
+            C = self.centroid
+            D = cells[self.neighbour].centroid
+        elif self.neighbour is None:
+            D = self.centroid
+            C = cells[self.owner].centroid
+        else :
+            C = cells[self.owner].centroid
+            D = cells[self.neighbour].centroid
+        return C,D
+    
     def Ef_Tf(self,cells:np.array) -> tuple:
         """Décompose le vecteur surface dans le repère formé par la droite reliant le centre des cellules et la tangente à la face"""
-        #TODO : vérifier si la face est une frontière
-        C = cells[self.owner].centroid
-        D = cells[self.neighbour].centroid
+        C,D = self.getCD(cells)
         e = np.linalg.norm(C - D) # Vecteur unitaire entre les centres des cellules
         if e == 0:
             raise MeshError(f"Les centres des cellules {self.owner} et {self.neighbour} sont identiques, impossible de calculer la direction de la face")
-        Ef = np.dot(self.surface, self.surface)/np.dot(e,self.surface) * e  # Projection de la surface sur la direction entre les centres des cellules
+        Ef = np.dot(e,self.surface) * e  # Projection de la surface sur la direction entre les centres des cellules
         Tf = self.surface - Ef
         return  Ef, Tf
     
     def distance_des_centres(self,cells:np.array)->float:
         """Calcul de la distance entre les centres des cellules"""
-        C = cells[self.owner]
-        D = cells[self.neighbour]
-        return C.distance_from(D)
+        C,D = self.getCD(cells)
+        return np.linalg.norm(C - D)
     
-    def gDiff_f(self, cells) :
-        """Calcul la valeur E_f / d_CF, appelée gDiff_f dans le bouquin (voir page 246)"""
-        return self.Ef_Tf(cells)[0] / self.distance_des_centres(cells)
+    def normal_distance(self,obj:GeomObject) -> float:
+        """Calcul de la distance normale entre la face et un objet géométrique"""
+        c = obj.centroid
+        vec_d = c - self.centroid
+        return np.abs(np.dot(vec_d, self.normal))  # Distance normale à la face car ||n||=1
+    
+    def gDiff_f(self, cells:GeomObject)->float :
+        """Calcul la valeur E_f / d_CF, appelée gDiff_f dans le bouquin (voir page 246)\n
+        Input: array of Cell objects\n
+        Output: float"""
+        return np.linalg.norm(self.Ef_Tf(cells)[0]) / self.distance_des_centres(cells)
     
     def next_object(self,dir : np.ndarray, mesh) -> int:
         """Renvoie l'indice de la face voisine dans la direction donnée"""
@@ -294,7 +322,7 @@ class Mesh():
         new_mesh = Mesh(nodes=self.nodes.copy(), faces=self.faces.copy(), cells=self.cells.copy())
         return new_mesh
 
-    def read_mesh(self, filename:str,faces_per_cell = 4)->None:
+    def read_mesh(self, filename:str,faces_per_cell = 4)-> tuple[np.array, np.array, np.array] :
         lines = open(filename, 'r').readlines()
         n,f,c = get_paraph(lines)
         n_faces = c-f+1
@@ -451,11 +479,19 @@ class Mesh():
 
         plt.legend(["Cell Boundaries", "Face Normals", "Nodes", "Cell Centroids"], loc="upper right", fontsize=8)
     
-    def find_cell(self,x:float,y:float)->int:
+    def find_cell_index(self,x:float,y:float)->int:
         for i in range(len(self.cells)):
             cell = self.cells[i]
             if cell.contains(x,y,self.nodes):
                 return i
+    
+    def find_cell(self,x:float,y:float)->Cell:
+        """Renvoie la cellule contenant le point (x,y)"""
+        i = self.find_cell_index(x,y)
+        if i is not None:
+            return self.cells[i]
+        else:
+            return None
 
     def matrice_voisins(self)->np.array:
         """Calcul de la matrice des voisins"""
@@ -478,11 +514,17 @@ class Mesh():
     def setNormalDistanceToWall(self):
         # TODO 
         walls = self.getWalls()
+        if len(walls) == 0:
+            for c in self.cells:
+                c.distToWall = np.inf
+            for f in self.faces:
+                f.distToWall = np.inf
+            return
         for f_i in walls:
             face = self.faces[f_i]
             face.distToWall = 0
         # Iterating on the cells to find the closest wall face
-        for i in tqdm(range(len(self.cells)), desc="Calculating distance to wall"):
+        for i in range(len(self.cells)):
             self.cells[i].distToWall = np.inf
             for fwi in walls :
                 d = self.cells[i].distance_from(self.faces[fwi])
@@ -597,8 +639,8 @@ if __name__ ==  "__main__" :
 
     cells_ligne = np.array([cell0, cell1, cell2, cell3])
 
-    self = Mesh(cells=cells_ligne, nodes=nodes_ligne, faces=faces_ligne)
+    mesh = Mesh(cells=cells_ligne, nodes=nodes_ligne, faces=faces_ligne)
 
-    self.plot_mesh()  # Affiche le maillage
-    self.plot_distance_to_wall_heatmap()
+    mesh.plot_mesh()  # Affiche le maillage
+    mesh.plot_distance_to_wall_heatmap()
     plt.show()
